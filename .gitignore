@@ -1,3 +1,4 @@
-*.csv
+labeled_10k.csv
+unlabeled*
 *.txt
 *.pyc

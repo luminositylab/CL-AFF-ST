@@ -34,6 +34,8 @@ from allennlp.training.trainer import Trainer
 
 from allennlp.predictors import SentenceTaggerPredictor
 
+from simple_seq2vec import SentenceSeq2VecPredictor
+
 #elmo boilerplate
 #from allennlp.modules.elmo import Elmo, batch_to_ids
 #options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
@@ -141,7 +143,7 @@ class LstmAgency(Model):
         #op = self.softmax(loutput)
         op = loutput
 
-        output = {"agency_logits": op}
+        output = {"agency_score": op}
         #print("Size of agency_logits: {}".format(op.size()))
         #print("Size of agency array: {}".format(agency.unsqueeze(dim=1).size()))
         #print("Size of sentence array: {}".format(embeddings.size()))
@@ -158,56 +160,6 @@ class LstmAgency(Model):
         return {"accuracy": self.accuracy.get_metric(reset)}
 
 
-
-'''class LstmSocial(Model):
-
-    def __init__(self,
-
-                 word_embeddings: TextFieldEmbedder,
-
-                 encoder: Seq2VecEncoder,
-
-                 vocab: Vocabulary) -> None:
-
-        super().__init__(vocab)
-        self.word_embeddings = word_embeddings
-        self.encoder = encoder
-
-        self.hidden2tag = torch.nn.Linear(in_features=encoder.get_output_dim(),
-                                          out_features=vocab.get_vocab_size('social'))
-
-        self.accuracy = CategoricalAccuracy()
-
-    def forward(self,
-                sentence: Dict[str, torch.Tensor],
-                social: torch.Tensor = None) -> torch.Tensor:
-
-        mask = get_text_field_mask(sentence)
-
-        embeddings = self.word_embeddings(sentence)
-
-        encoder_out = self.encoder(embeddings, mask)
-
-        #the line below is important change. the [-1] takes the final output state from the LSTM,
-        #effectively creating a many-to-one LSTM modela
-
-        #stopping point at 8:35pm on Wednesday, November 7
-        #need to compute the loss for both and combine somehow. Consult web resources for
-        #two value prediction models online. Once this is resolved it should train.
-        tag_logits = self.hidden2tag(encoder_out)
-        output = {"agency_logits": tag_logits}
-
-        if social is not None:
-            self.accuracy(tag_logits, agency, mask)
-            output["loss"] = sequence_cross_entropy_with_logits(tag_logits, labels, mask)
-
-        return output
-
-    def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        return {"accuracy": self.accuracy.get_metric(reset)}
-'''
-
-
 reader = CLAFFDatasetReader()
 
 train_dataset = reader.read(cached_path('labeled_9k5.csv'))
@@ -216,8 +168,8 @@ validation_dataset = reader.read(cached_path('labeled_k5.csv'))
 #vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
 vocab = Vocabulary.from_instances(train_dataset)
 
-EMBEDDING_DIM = 100
-HIDDEN_DIM = 10
+EMBEDDING_DIM = 20
+HIDDEN_DIM = 5
 
 #elmo = Elmo(options_file, weight_file, 1, dropout=0)
 token_embedding = Embedding(num_embeddings=vocab.get_vocab_size('tokens'),
@@ -228,7 +180,7 @@ lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_firs
 
 model = LstmAgency(word_embeddings, lstm, vocab)
 
-optimizer = optim.SGD(model.parameters(), lr=0.03)
+optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
 iterator = BucketIterator(batch_size=100, sorting_keys=[("sentence", "num_tokens")])
 
@@ -246,11 +198,11 @@ trainer.train()
 
 
 #need to write predictor
-#predictor = SentenceTaggerPredictor(model, dataset_reader=reader)
+predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
-#tag_logits = predictor.predict("The dog ate the apple")['tag_logits']
+testsentence = "The dog ate the apple"
 
-#tag_ids = np.argmax(tag_logits, axis=-1)
+agency_output = predictor.predict(testsentence)['agency_score']
 
-#print([model.vocab.get_token_from_index(i, 'agency') for i in tag_ids])
+print("For test sentence \'{}\', the output is {}".format(testsentence, agency_output))
 
