@@ -244,11 +244,13 @@ trainer = Trainer(model=model,
 
 trainer.train()
 
-predictor = SentenceTaggerPredictor(model, dataset_reader=reader)
 
-tag_logits = predictor.predict("The dog ate the apple")['tag_logits']
+#need to write predictor
+#predictor = SentenceTaggerPredictor(model, dataset_reader=reader)
 
-tag_ids = np.argmax(tag_logits, axis=-1)
+#tag_logits = predictor.predict("The dog ate the apple")['tag_logits']
 
-print([model.vocab.get_token_from_index(i, 'agency') for i in tag_ids])
+#tag_ids = np.argmax(tag_logits, axis=-1)
+
+#print([model.vocab.get_token_from_index(i, 'agency') for i in tag_ids])
 
