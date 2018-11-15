@@ -12,4 +12,4 @@ Our codebase for our submission to the AffCon 2019 CL-AFF Shared Task. Still in 
 Requires the AllenNLP library and Python 3.6 or above to run.
 
 ## Next Steps
-Implementing the dilated convolutions model.
+Implementing the new model, establishing baseline vs new model comparisons, creating integrated demo script, unsupervised tasks
