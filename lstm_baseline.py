@@ -162,8 +162,8 @@ class LstmAgency(Model):
 
 reader = CLAFFDatasetReader()
 
-train_dataset = reader.read(cached_path('labeled_9k5.csv'))
-validation_dataset = reader.read(cached_path('labeled_k5.csv'))
+train_dataset = reader.read(cached_path('csv/labeled_9k5.csv'))
+validation_dataset = reader.read(cached_path('csv/labeled_k5.csv'))
 
 #vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
 vocab = Vocabulary.from_instances(train_dataset)
