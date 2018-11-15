@@ -2,7 +2,7 @@
 Our codebase for our submission to the AffCon 2019 CL-AFF Shared Task. Still in progress.
 
 ## File Structure
-`csv` contains modified versions of the dataset files provided for the competition, we will not be reuploading the original dataset.
+`csv\` contains modified versions of the dataset files provided for the competition, we will not be reuploading the original dataset.
 
 `lstm_baseline.py` is a baseline implementation of a naive lstm taking in the default AllenNLP embeddings.
 
