@@ -36,14 +36,10 @@ from allennlp.predictors import SentenceTaggerPredictor
 
 from simple_seq2vec import SentenceSeq2VecPredictor
 
-#for debug
-import time
-
-
 #elmo boilerplate
-#from allennlp.modules.elmo import Elmo, batch_to_ids
-#options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
-#weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
+from allennlp.modules.elmo import Elmo, batch_to_ids
+options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
+weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
 
 #torch.manual_seed(1)
 
@@ -100,12 +96,12 @@ class CLAFFDatasetReader(DatasetReader):
                 yield self.text_to_instance([Token(word) for word in sentence], str(agency), str(social))
 
 
-
+############# I THINK I NEED TO WRITE THE ELMO STUFF IN THE DATASETREADER ########################
 class LstmAgency(Model):
 
     def __init__(self,
 
-                 word_embeddings: TextFieldEmbedder,
+                 elmo,
 
                  encoder: Seq2SeqEncoder,
 
@@ -114,7 +110,7 @@ class LstmAgency(Model):
                  lossmetric = torch.nn.MSELoss()) -> None:
 
         super().__init__(vocab)
-        self.word_embeddings = word_embeddings
+        self.elmo = elmo
         self.encoder = encoder
 
         self.hidden2tag = torch.nn.Linear(in_features=encoder.get_output_dim(),
@@ -130,14 +126,16 @@ class LstmAgency(Model):
                 sentence: Dict[str, torch.Tensor],
                 agency: torch.Tensor = None,
                 social: torch.Tensor = None) -> torch.Tensor:
-
-        mask = get_text_field_mask(sentence)
-
-        embeddings = self.word_embeddings(sentence)
+        mask1 = get_text_field_mask(sentence)
+        character_ids = batch_to_ids(sentence)
+        #embeddings = self.word_embeddings(sentence)
+        embeddingdict = self.elmo(character_ids)
+        embeddings = embeddingdict['elmo_representations'][0].squeeze().unsqueeze(dim=1)
+        mask = embeddingdict['mask'].squeeze().unsqueeze(dim=1)
         print(embeddings.size())
         print(mask.size())
-        time.sleep(20)
-        encoder_out = self.encoder(embeddings, mask)
+        print(mask1.size())
+        encoder_out = self.encoder(embeddings, mask1)
 
         #the line below is important change. the [-1] takes the final output state from the LSTM,
         #effectively creating a many-to-one LSTM model
@@ -172,18 +170,19 @@ train_dataset = reader.read(cached_path('csv/labeled_9k5.csv'))
 validation_dataset = reader.read(cached_path('csv/labeled_k5.csv'))
 
 vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
+#vocab = Vocabulary.from_instances(train_dataset)
 
-EMBEDDING_DIM = 20
+
+elmo = Elmo(options_file, weight_file, 1, dropout=0)
+#token_embedding = Embedding(num_embeddings=vocab.get_vocab_size('tokens'),
+                            #embedding_dim=EMBEDDING_DIM)
+#word_embeddings = BasicTextFieldEmbedder({"tokens": token_embedding})
+EMBEDDING_DIM = elmo.get_output_dim()
 HIDDEN_DIM = 5
-
-#elmo = Elmo(options_file, weight_file, 1, dropout=0)
-token_embedding = Embedding(num_embeddings=vocab.get_vocab_size('tokens'),
-                            embedding_dim=EMBEDDING_DIM)
-word_embeddings = BasicTextFieldEmbedder({"tokens": token_embedding})
 
 lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True))
 
-model = LstmAgency(word_embeddings, lstm, vocab)
+model = LstmAgency(elmo, lstm, vocab)
 
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
@@ -206,12 +205,8 @@ trainer.train()
 predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
 testsentence = "The dog ate the apple"
-testsentence2 = "I made dinner for all my friends"
 
-agency_output1 = predictor.predict(testsentence)['agency_score']
-agency_output2 = predictor.predict(testsentence2)['agency_score']
+agency_output = predictor.predict(testsentence)['agency_score']
 
-
-print("For test sentence \'{}\', the output is {}".format(testsentence, agency_output1))
-print("For test sentence \'{}\', the output is {}".format(testsentence2, agency_output2))
+print("For test sentence \'{}\', the output is {}".format(testsentence, agency_output))
 
