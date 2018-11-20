@@ -134,9 +134,9 @@ class LstmAgency(Model):
         mask = get_text_field_mask(sentence)
 
         embeddings = self.word_embeddings(sentence)
-        print(embeddings.size())
-        print(mask.size())
-        time.sleep(20)
+        #print(embeddings.size())
+        #print(mask.size())
+
         encoder_out = self.encoder(embeddings, mask)
 
         #the line below is important change. the [-1] takes the final output state from the LSTM,

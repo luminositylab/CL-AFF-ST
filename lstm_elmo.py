@@ -38,6 +38,7 @@ from simple_seq2vec import SentenceSeq2VecPredictor
 
 #elmo boilerplate
 from allennlp.modules.elmo import Elmo, batch_to_ids
+from allennlp.data.token_indexers.elmo_indexer import ELMoCharacterMapper, ELMoTokenCharactersIndexer
 options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
 weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
 
@@ -55,7 +56,7 @@ class CLAFFDatasetReader(DatasetReader):
 
     def __init__(self, token_indexers: Dict[str, TokenIndexer] = None) -> None:
         super().__init__(lazy=False)
-        self.token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
+        self.token_indexers = token_indexers or {"character_ids": ELMoTokenCharactersIndexer()}
 
     def text_to_instance(self, tokens: List[Token], agency: str = None, social: str = None) -> Instance:
         sentence_field = TextField(tokens, self.token_indexers)
@@ -127,16 +128,20 @@ class LstmAgency(Model):
                 agency: torch.Tensor = None,
                 social: torch.Tensor = None) -> torch.Tensor:
         mask1 = get_text_field_mask(sentence)
-        character_ids = batch_to_ids(sentence)
+
+        print(sentence)
+
         #embeddings = self.word_embeddings(sentence)
-        embeddingdict = self.elmo(character_ids)
+        embeddingdict = self.elmo(sentence)
+        #embeddings = embeddingdict['elmo_representations'][0].squeeze().unsqueeze(dim=1)
+        #mask = embeddingdict['mask'].squeeze().unsqueeze(dim=1)
         embeddings = embeddingdict['elmo_representations'][0].squeeze().unsqueeze(dim=1)
         mask = embeddingdict['mask'].squeeze().unsqueeze(dim=1)
         print(embeddings.size())
         print(mask.size())
         print(mask1.size())
-        encoder_out = self.encoder(embeddings, mask1)
-
+        encoder_out = self.encoder(embeddings, mask)
+        print("reached")
         #the line below is important change. the [-1] takes the final output state from the LSTM,
         #effectively creating a many-to-one LSTM model
 
@@ -146,13 +151,14 @@ class LstmAgency(Model):
         loutput = self.hidden2tag(encoder_out)
         #op = self.softmax(loutput)
         op = loutput
+        print(op)
 
         output = {"agency_score": op}
         #print("Size of agency_logits: {}".format(op.size()))
         #print("Size of agency array: {}".format(agency.unsqueeze(dim=1).size()))
         #print("Size of sentence array: {}".format(embeddings.size()))
         #print(agency)
-
+        print(agency.size())
 
         if agency is not None:
             self.accuracy(torch.round(op), agency.type(torch.FloatTensor))
