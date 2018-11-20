@@ -117,9 +117,10 @@ class LstmAgencySocial(Model):
 
         self.hidden2tag = torch.nn.Linear(in_features=encoder.get_output_dim(),
                                           out_features=1)
-
+        #Define separate accuracies
         self.accuracy_social = BooleanAccuracy()
         self.accuracy_agency = BooleanAccuracy()
+        #Common loss
         self.loss = lossmetric
         #self.loss2 = lossmetric
         self.softmax = torch.nn.Softmax(dim=0)
@@ -141,12 +142,7 @@ class LstmAgencySocial(Model):
         encoder_out_agency = self.encoder(embeddings, mask)
         #print(encoder_out.size())
         #print("Encode:",encoder_out[-1].size())
-        #the line below is important change. the [-1] takes the final output state from the LSTM,
-        #effectively creating a many-to-one LSTM model
-
-        #stopping point at 8:35pm on Wednesday, November 7
-        #need to compute the loss for both and combine somehow. Consult web resources for
-        #two value prediction models online. Once this is resolved it should train.
+    
         loutput_social = self.hidden2tag(encoder_out_social)
         loutput_agency = self.hidden2tag(encoder_out_agency)
 
@@ -166,22 +162,17 @@ class LstmAgencySocial(Model):
 
 
         if social is not None and agency is not None:
+            #Compute different accuracies
             self.accuracy_social(torch.round(op_social), social.type(torch.FloatTensor))
             self.accuracy_agency(torch.round(op_agency), agency.type(torch.FloatTensor))
+            #Compute common loss
             output["loss"] = self.loss(torch.cat([op_social,op_agency], dim=1),torch.cat([social.unsqueeze(dim=1).type(torch.FloatTensor),agency.unsqueeze(dim=1).type(torch.FloatTensor)],dim=1))
-    
-
-            #output["loss"] = self.loss(op, agency.unsqueeze(dim=1).type(torch.FloatTensor))
-
-        # if agency is not None:
-        #     self.accuracy(torch.round(op_agency), social.type(torch.FloatTensor))
-        #     output["loss"] = self.loss2(op_agency, social.unsqueeze(dim=1).type(torch.FloatTensor))
-
         
 
         return output
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
+        #Return both the accuracies
         return {"accuracy_social": self.accuracy_social.get_metric(reset), "accuracy_agency": self.accuracy_agency.get_metric(reset) }
 
 
@@ -222,7 +213,7 @@ trainer = Trainer(model=model,
 trainer.train()
 
 
-#need to write predictor
+#need to fix predictor
 predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
 testsentence = "The dog ate the apple"
