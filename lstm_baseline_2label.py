@@ -119,10 +119,10 @@ class LstmAgencySocial(Model):
         self.hidden2tag = torch.nn.Linear(in_features=encoder.get_output_dim(),
                                           out_features=1)
 
-        self.accuracy_social = BooleanAccuracy()
-        self.accuracy_agency = BooleanAccuracy()
-        self.loss1 = lossmetric
-        self.loss2 = lossmetric
+        self.accuracy = BooleanAccuracy()
+        #self.accuracy_agency = BooleanAccuracy()
+        self.loss = lossmetric
+        #self.loss2 = lossmetric
         self.softmax = torch.nn.Softmax(dim=0)
 
 
@@ -180,21 +180,21 @@ class LstmAgencySocial(Model):
         if social is not None and agency is not None:
             social = social.unsqueeze(1)
             agency = agency.unsqueeze(1)
-            print(social[99])
-            print(agency[99])
+            print(social[14])
+            print(agency[14])
             labels = torch.cat((social,agency),dim=1)
-            print(labels[99])
+            print(labels[14])
             print(labels.size())
             #labels =  labels.resize_((100,2)).squeeze(dim=0)
             
             #print(labels)
             #print("THIS:",labels.size())
-            self.accuracy_social(torch.round(final), social.type(torch.FloatTensor))
+            self.accuracy(torch.round(final), social.type(torch.FloatTensor))
             #self.accuracy_agency(torch.round(op_agency), agency.type(torch.FloatTensor))
             #output["loss"] = self.loss(torch.cat([op_social,op_agency], dim=1),torch.cat([social.unsqueeze(dim=1).type(torch.FloatTensor),agency.unsqueeze(dim=1).type(torch.FloatTensor)],dim=1))
             #output_agency["loss"] = self.loss(torch.cat([op_social,op_agency], dim=1),torch.cat([social.unsqueeze(dim=1).type(torch.FloatTensor),agency.unsqueeze(dim=1).type(torch.FloatTensor)],dim=1))
-            loss_social = self.loss1(final, labels.unsqueeze(dim=1).type(torch.FloatTensor))
-            print("LOSSSSSS1:", loss_social)
+            output["loss"] = self.loss(final, labels.type(torch.FloatTensor))
+            #print("LOSSSSSS1:", loss_social)
             
             #loss_agency = self.loss2(op_agency, agency.unsqueeze(dim=1).type(torch.FloatTensor))
             #print("LOSSSSSSS2:", loss_agency)
@@ -217,7 +217,7 @@ class LstmAgencySocial(Model):
         return output
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        return {"accuracy_social": self.accuracy_social.get_metric(reset), "accuracy_agency": self.accuracy_agency.get_metric(reset) }
+        return {"accuracy": self.accuracy.get_metric(reset) }
 
 
 
