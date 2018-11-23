@@ -6,6 +6,8 @@ Our codebase for our submission to the AffCon 2019 CL-AFF Shared Task. Still in 
 
 `lstm_baseline.py` is a baseline implementation of a naive lstm taking in the default AllenNLP embeddings.
 
+`lstm_baseline_2label.py` is a mutlilabel classification baseline implementation of a naive lstm taking in the default AllenNLP embeddings.
+
 `lstm_elmo.py` (in progress) is a baseline implementation of a naive lstm taking ELMO vectors as input.
 
 ## Dependencies
