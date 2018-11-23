@@ -59,7 +59,7 @@ class CLAFFDatasetReader(DatasetReader):
         super().__init__(lazy=False)
         self.token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
 
-    def text_to_instance(self, tokens: List[Token], agency: str = None, social: str = None) -> Instance:
+    def text_to_instance(self, tokens: List[Token], agency:str = None, social:str = None) -> Instance:
         sentence_field = TextField(tokens, self.token_indexers)
         fields = {"sentence": sentence_field}
 
@@ -94,8 +94,9 @@ class CLAFFDatasetReader(DatasetReader):
                 else:
                     agency = None
                     social = None
+                #out = [str(agency), str(social)]
                 #yield self.text_to_instance([Token(remover.sub('',word)) for word in sentence], agency, social)
-                yield self.text_to_instance([Token(word) for word in sentence], str(agency), str(social))
+                yield self.text_to_instance([Token(word) for word in sentence],str(agency), str(social))
 
 
 
@@ -117,12 +118,11 @@ class LstmAgencySocial(Model):
 
         self.hidden2tag = torch.nn.Linear(in_features=encoder.get_output_dim(),
                                           out_features=1)
-        #Define separate accuracies
+
         self.accuracy_social = BooleanAccuracy()
         self.accuracy_agency = BooleanAccuracy()
-        #Common loss
-        self.loss = lossmetric
-        #self.loss2 = lossmetric
+        self.loss1 = lossmetric
+        self.loss2 = lossmetric
         self.softmax = torch.nn.Softmax(dim=0)
 
 
@@ -133,27 +133,43 @@ class LstmAgencySocial(Model):
                 social: torch.Tensor = None) -> torch.Tensor:
 
         mask = get_text_field_mask(sentence)
-
+        #print(agency)
         embeddings = self.word_embeddings(sentence)
-        print(embeddings.size())
-        print(mask.size())
+        #print(embeddings.size())
+        #print(mask.size())
         #time.sleep(20)
         encoder_out_social = self.encoder(embeddings, mask)
         encoder_out_agency = self.encoder(embeddings, mask)
+        #print("THIS IS FIRST",encoder_out_agency.size())
         #print(encoder_out.size())
         #print("Encode:",encoder_out[-1].size())
-    
+        #the line below is important change. the [-1] takes the final output state from the LSTM,
+        #effectively creating a many-to-one LSTM model
+
+        #stopping point at 8:35pm on Wednesday, November 7
+        #need to compute the loss for both and combine somehow. Consult web resources for
+        #two value prediction models online. Once this is resolved it should train.
+        #final = torch.cat((encoder_out_social,encoder_out_agency), dim=1)
+        #print("LOOK HERE",final.size())
         loutput_social = self.hidden2tag(encoder_out_social)
+        #print("RESULT",loutput_social.size())
         loutput_agency = self.hidden2tag(encoder_out_agency)
+        #print(loutput_social)
+        final = torch.cat((loutput_social,loutput_agency), dim=1)
+        #print(final)
 
         #op = self.softmax(loutput)
-        op_social = loutput_social
+        #op_social = self.softmax(loutput_social)
+
         #print(op)
-        op_agency = loutput_agency
+        #op_agency = self.softmax(loutput_agency)
+        #print(loutput_agency)
         #print("OP size:", op.size())
 
-
-        output = {"social_score": op_social, "agency_score":op_agency}
+        #output ={"social_score": op_social, "agency_score": op_agency}
+        output = {"score": final}
+        #output_social = {"score_social": op_social}
+        #output_agency = {"score_agency": op_agency}
         #print(output)
         #print("Size of agency_logits: {}".format(op.size()))
         #print("Size of agency array: {}".format(agency.unsqueeze(dim=1).size()))
@@ -162,17 +178,45 @@ class LstmAgencySocial(Model):
 
 
         if social is not None and agency is not None:
-            #Compute different accuracies
-            self.accuracy_social(torch.round(op_social), social.type(torch.FloatTensor))
-            self.accuracy_agency(torch.round(op_agency), agency.type(torch.FloatTensor))
-            #Compute common loss
-            output["loss"] = self.loss(torch.cat([op_social,op_agency], dim=1),torch.cat([social.unsqueeze(dim=1).type(torch.FloatTensor),agency.unsqueeze(dim=1).type(torch.FloatTensor)],dim=1))
-        
+            social = social.unsqueeze(1)
+            agency = agency.unsqueeze(1)
+            print(social[99])
+            print(agency[99])
+            labels = torch.cat((social,agency),dim=1)
+            print(labels[99])
+            print(labels.size())
+            #labels =  labels.resize_((100,2)).squeeze(dim=0)
+            
+            #print(labels)
+            #print("THIS:",labels.size())
+            self.accuracy_social(torch.round(final), social.type(torch.FloatTensor))
+            #self.accuracy_agency(torch.round(op_agency), agency.type(torch.FloatTensor))
+            #output["loss"] = self.loss(torch.cat([op_social,op_agency], dim=1),torch.cat([social.unsqueeze(dim=1).type(torch.FloatTensor),agency.unsqueeze(dim=1).type(torch.FloatTensor)],dim=1))
+            #output_agency["loss"] = self.loss(torch.cat([op_social,op_agency], dim=1),torch.cat([social.unsqueeze(dim=1).type(torch.FloatTensor),agency.unsqueeze(dim=1).type(torch.FloatTensor)],dim=1))
+            loss_social = self.loss1(final, labels.unsqueeze(dim=1).type(torch.FloatTensor))
+            print("LOSSSSSS1:", loss_social)
+            
+            #loss_agency = self.loss2(op_agency, agency.unsqueeze(dim=1).type(torch.FloatTensor))
+            #print("LOSSSSSSS2:", loss_agency)
+
+            #loss_final = loss_social + loss_agency
+            #loss_final.backward(retain_graph=True)
+            #output["loss"] = loss_final
+            #print(output["social_score"])
+            #print(output["agency_score"])
+
+            #output_social["loss"] = loss_social 
+            #output_agency["loss"] = loss_agency 
+            #print(output_agency)
+            #print(output_social)
+
+        # if agency is not None:
+        #     self.accuracy(torch.round(op_agency), social.type(torch.FloatTensor))
+        #     output["loss"] = self.loss2(op_agency, social.unsqueeze(dim=1).type(torch.FloatTensor))
 
         return output
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        #Return both the accuracies
         return {"accuracy_social": self.accuracy_social.get_metric(reset), "accuracy_agency": self.accuracy_agency.get_metric(reset) }
 
 
@@ -194,9 +238,10 @@ word_embeddings = BasicTextFieldEmbedder({"tokens": token_embedding})
 
 lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True))
 
-model = LstmAgencySocial(word_embeddings, lstm, vocab)
+model= LstmAgencySocial(word_embeddings, lstm, vocab)
 
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
+#optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
 iterator = BucketIterator(batch_size=100, sorting_keys=[("sentence", "num_tokens")])
 
@@ -213,14 +258,16 @@ trainer = Trainer(model=model,
 trainer.train()
 
 
-#need to fix predictor
+#need to write predictor
 predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
 testsentence = "The dog ate the apple"
 testsentence2 = "I made dinner for all my friends"
 
-agency_output1 = predictor.predict(testsentence)['agency_score']
-social_output1 = predictor.predict(testsentence)['social_score']
+agency_output1 = predictor.predict(testsentence)
+print("OUTPUT:",agency_output1)
+social_output1 = predictor.predict(testsentence)['agency_score']
+print("OUTPUT:",social_output1)
 #agency_output2 = predictor.predict(testsentence2)['agency_score']
 #social_output2 = predictor.predict(testsentence2)['social_score']
 
