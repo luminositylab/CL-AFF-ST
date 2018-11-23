@@ -102,16 +102,19 @@ class CLAFFDatasetReader(DatasetReader):
 
 
 
-class LstmAgencySocial(Model):
+class LstmSocialAgency(Model):
+    """
+    LSTM model for predicting two labels Social and Agency for the CL-AFF labelled data
+    """
 
     def __init__(self,
-
+                 #Type of word embeddings
                  word_embeddings: TextFieldEmbedder,
-
+                 #Type of encoder
                  encoder: Seq2SeqEncoder,
 
                  vocab: Vocabulary,
-
+                 #Change loss function here
                  lossmetric = torch.nn. MSELoss()) -> None:
 
         super().__init__(vocab)
@@ -120,11 +123,9 @@ class LstmAgencySocial(Model):
 
         self.hidden2tag = torch.nn.Linear(in_features=encoder.get_output_dim(),
                                           out_features=2)
-
+        #Initializing accuracy, loss and softmax variables
         self.accuracy = BooleanAccuracy()
-        #self.accuracy_agency = BooleanAccuracy()
         self.loss = lossmetric
-        #self.loss2 = lossmetric
         self.softmax = torch.nn.Softmax(dim=0)
 
 
@@ -133,93 +134,40 @@ class LstmAgencySocial(Model):
                 sentence: Dict[str, torch.Tensor],
                 agency: torch.Tensor = None,
                 social: torch.Tensor = None) -> torch.Tensor:
-
+        #Mask to pad shorter sentences
         mask = get_text_field_mask(sentence)
-        #print(agency)
+        #Convert input into word embeddings
         embeddings = self.word_embeddings(sentence)
-        #print(embeddings)
-        #print(mask.size())
+
         #time.sleep(20)
-        encoder_out_social = self.encoder(embeddings, mask)
-        #encoder_out_agency = self.encoder(embeddings, mask)
-        #print("THIS IS FIRST",encoder_out_agency.size())
-        #print(encoder_out.size())
-        #print("Encode:",encoder_out[-1].size())
-        #the line below is important change. the [-1] takes the final output state from the LSTM,
-        #effectively creating a many-to-one LSTM model
 
-        #stopping point at 8:35pm on Wednesday, November 7
-        #need to compute the loss for both and combine somehow. Consult web resources for
-        #two value prediction models online. Once this is resolved it should train.
-        #final = torch.cat((encoder_out_social,encoder_out_agency), dim=1)
-        #print("LOOK HERE",final.size())
-        loutput_social = self.hidden2tag(encoder_out_social)
-        #print("RESULT",loutput_social.size())
-        #loutput_agency = self.hidden2tag(encoder_out_agency)
-        #print(loutput_social)
-        #final = Variable(torch.cat((loutput_social,loutput_agency), dim=1), requires_grad=True)
-        #print(final)
+        encoder_out = self.encoder(embeddings, mask)
 
-        #op = self.softmax(loutput)
+        loutput = self.hidden2tag(encoder_out)
         
-        #final = self.softmax(final)
-        #print(final)
+        #output_score is a list of 2 variables which update the scores for social and agency class 
+        output_score = Variable(loutput,requires_grad=True)
+        
 
-        #print(op)
-        #op_agency = self.softmax(loutput_agency)
-        #print(loutput_agency)
-        #print("OP size:", op.size())
-        final = Variable(loutput_social,requires_grad=True)
-        #output ={"social_score": op_social, "agency_score": op_agency}
-        output = {"score": final}
-        #output_social = {"score_social": op_social}
-        #output_agency = {"score_agency": op_agency}
-        #print(output)
-        #print("Size of agency_logits: {}".format(op.size()))
-        #print("Size of agency array: {}".format(agency.unsqueeze(dim=1).size()))
-        #print("Size of sentence array: {}".format(embeddings.size()))
-        #print(agency)
-
+        output = {"score": output_score}
+        
 
         if social is not None and agency is not None:
-            #labels_acc = torch.cat((social,agency),dim=0)
+            #Unsqueeze the tags to convert them to concatenatable format
             social_sq = social.unsqueeze(1)
             agency_sq = agency.unsqueeze(1)
-            #print(social[14])
-            #print(agency[14])
+
+            #Concat the two tags as a single variable to be passed into the loss function
             labels = Variable(torch.cat((social_sq,agency_sq),dim=1))
-            #print(labels[14])
-            #print(labels.size())
-            #labels =  labels.resize_((100,2)).squeeze(dim=0)
             
-            #print(labels)
-            #print("THIS:",labels.size())
-            self.accuracy(torch.round(final), labels.type(torch.FloatTensor))
-            #self.accuracy_agency(torch.round(final), labels.type(torch.FloatTensor))
-            #self.accuracy_agency(torch.round(op_agency), agency.type(torch.FloatTensor))
+            #Accuracy(40%) is shit as of now, should improve with elmo word embeddings
+            self.accuracy(torch.round(output_score), labels.type(torch.FloatTensor))
+            
             #output["loss"] = self.loss(torch.cat([op_social,op_agency], dim=1),torch.cat([social.unsqueeze(dim=1).type(torch.FloatTensor),agency.unsqueeze(dim=1).type(torch.FloatTensor)],dim=1))
-            #output_agency["loss"] = self.loss(torch.cat([op_social,op_agency], dim=1),torch.cat([social.unsqueeze(dim=1).type(torch.FloatTensor),agency.unsqueeze(dim=1).type(torch.FloatTensor)],dim=1))
-            output["loss"] = self.loss(final, labels.type(torch.FloatTensor))
-            #print("LOSSSSSS1:", loss_social)
             
-            #loss_agency = self.loss2(op_agency, agency.unsqueeze(dim=1).type(torch.FloatTensor))
-            #print("LOSSSSSSS2:", loss_agency)
-
-            #loss_final = loss_social + loss_agency
-            #loss_final.backward(retain_graph=True)
-            #output["loss"] = loss_final
-            #print(output["social_score"])
-            #print(output["agency_score"])
-
-            #output_social["loss"] = loss_social 
-            #output_agency["loss"] = loss_agency 
-            #print(output_agency)
-            #print(output_social)
-
-        # if agency is not None:
-        #     self.accuracy(torch.round(op_agency), social.type(torch.FloatTensor))
-        #     output["loss"] = self.loss2(op_agency, social.unsqueeze(dim=1).type(torch.FloatTensor))
-            #print(output)
+            #Single loss function for two label prediciton
+            output["loss"] = self.loss(output_score, labels.type(torch.FloatTensor))
+            
         return output
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
@@ -244,8 +192,9 @@ word_embeddings = BasicTextFieldEmbedder({"tokens": token_embedding})
 
 lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True))
 
-model= LstmAgencySocial(word_embeddings, lstm, vocab)
+model= LstmSocialAgency(word_embeddings, lstm, vocab)
 
+#Chnage the optimizaer function here
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
 #optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
@@ -264,21 +213,22 @@ trainer = Trainer(model=model,
 trainer.train()
 
 
-#need to write predictor
+#Predictor working as expected, returns a dictionary as output which is list with scores of social and agency
 predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
 testsentence = "The dog ate the apple"
 testsentence2 = "I made dinner for all my friends"
 
-agency_output1 = predictor.predict(testsentence)['score'][1]
-print("OUTPUT:",agency_output1)
+
 social_output1 = predictor.predict(testsentence)['score'][0]
 print("OUTPUT:",social_output1)
-#agency_output2 = predictor.predict(testsentence2)['agency_score']
-#social_output2 = predictor.predict(testsentence2)['social_score']
+agency_output1 = predictor.predict(testsentence)['score'][1]
+print("OUTPUT:",agency_output1)
+social_output2 = predictor.predict(testsentence2)['score'][0]
+agency_output2 = predictor.predict(testsentence2)['score'][1]
 
 
-print("AGENCY For test sentence \'{}\', the output is {}".format(testsentence, agency_output1))
-print("SOCIAL For test sentence \'{}\', the output is {}".format(testsentence, social_output1))
-#print("For test sentence \'{}\', the output is {}".format(testsentence2, agency_output2))
-#print("For test sentence \'{}\', the output is {}".format(testsentence2, social_output2))
+print("Social score for test sentence \'{}\', the output is {}".format(testsentence, social_output1))
+print("Agency For test sentence \'{}\', the output is {}".format(testsentence, agency_output1))
+print("Social Score for test sentence \'{}\', the output is {}".format(testsentence2, social_output2))
+print("Agency for test sentence \'{}\', the output is {}".format(testsentence2, agency_output2))
