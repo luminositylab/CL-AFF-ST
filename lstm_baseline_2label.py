@@ -37,6 +37,7 @@ from allennlp.predictors import SentenceTaggerPredictor
 from simple_seq2vec import SentenceSeq2VecPredictor
 
 from torch.autograd import Variable
+import torch.nn.functional as F
 
 #for debug
 import time
@@ -115,7 +116,7 @@ class LstmSocialAgency(Model):
 
                  vocab: Vocabulary,
                  #Change loss function here
-                 lossmetric = torch.nn. MSELoss()) -> None:
+                 lossmetric = torch.nn.MSELoss()) -> None:
 
         super().__init__(vocab)
         self.word_embeddings = word_embeddings
@@ -146,14 +147,15 @@ class LstmSocialAgency(Model):
         loutput = self.hidden2tag(encoder_out)
         
         #output_score is a list of 2 variables which update the scores for social and agency class 
-        output_score = Variable(loutput,requires_grad=True)
+        output_score = loutput
+        #output_score = self.sigmoid(output_score)
         
-
+        output_score = torch.sigmoid(output_score)
         output = {"score": output_score}
-        
+        #output_score = torch.sigmoid(output_score)
 
         if social is not None and agency is not None:
-            #Unsqueeze the tags to convert them to concatenatable format
+            #Unsqueeze(reshape) the tags to convert them to concatenatable format
             social_sq = social.unsqueeze(1)
             agency_sq = agency.unsqueeze(1)
 
@@ -167,7 +169,7 @@ class LstmSocialAgency(Model):
             
             #Single loss function for two label prediciton
             output["loss"] = self.loss(output_score, labels.type(torch.FloatTensor))
-            
+          
         return output
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
@@ -216,14 +218,12 @@ trainer.train()
 #Predictor working as expected, returns a dictionary as output which is list with scores of social and agency
 predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
-testsentence = "The dog ate the apple"
-testsentence2 = "I made dinner for all my friends"
+testsentence = "I went to my cousins baby shower and it made me feel happy that i got to spend time with family"
+testsentence2 = "The wife and I took our 4 year old to Chili's for dinner"
 
 
 social_output1 = predictor.predict(testsentence)['score'][0]
-print("OUTPUT:",social_output1)
 agency_output1 = predictor.predict(testsentence)['score'][1]
-print("OUTPUT:",agency_output1)
 social_output2 = predictor.predict(testsentence2)['score'][0]
 agency_output2 = predictor.predict(testsentence2)['score'][1]
 
