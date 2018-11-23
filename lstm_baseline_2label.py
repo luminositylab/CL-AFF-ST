@@ -218,8 +218,10 @@ trainer.train()
 #Predictor working as expected, returns a dictionary as output which is list with scores of social and agency
 predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
-testsentence = "I went to my cousins baby shower and it made me feel happy that i got to spend time with family"
-testsentence2 = "The wife and I took our 4 year old to Chili's for dinner"
+#If the score value is <0.5 the label is YES, else a NO
+#Not sure if this is the right thing to do although
+testsentence = "I had a nice date with my friend who came from africa"
+testsentence2 = "I was complimented on the sweater I wore to work today"
 
 
 social_output1 = predictor.predict(testsentence)['score'][0]
@@ -227,8 +229,17 @@ agency_output1 = predictor.predict(testsentence)['score'][1]
 social_output2 = predictor.predict(testsentence2)['score'][0]
 agency_output2 = predictor.predict(testsentence2)['score'][1]
 
+if social_output1 <= 0.5:
+    social_out = "YES"
+else:
+    social_out = "NO"
 
-print("Social score for test sentence \'{}\', the output is {}".format(testsentence, social_output1))
-print("Agency For test sentence \'{}\', the output is {}".format(testsentence, agency_output1))
+if agency_output1 <= 0.5:
+    agency_out = "YES"
+else:
+    agency_out = "NO"
+
+print("Social score for test sentence \'{}\', the output is {}".format(testsentence, social_out))
+print("Agency For test sentence \'{}\', the output is {}".format(testsentence, agency_out))
 print("Social Score for test sentence \'{}\', the output is {}".format(testsentence2, social_output2))
 print("Agency for test sentence \'{}\', the output is {}".format(testsentence2, agency_output2))
