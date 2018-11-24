@@ -160,7 +160,7 @@ class LstmSocialAgency(Model):
             agency_sq = agency.unsqueeze(1)
 
             #Concat the two tags as a single variable to be passed into the loss function
-            labels = Variable(torch.cat((social_sq,agency_sq),dim=1))
+            labels = torch.cat((social_sq,agency_sq),dim=1)
             
             #Accuracy(40%) is shit as of now, should improve with elmo word embeddings
             self.accuracy(torch.round(output_score), labels.type(torch.FloatTensor))
@@ -220,14 +220,25 @@ predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
 #If the score value is <0.5 the label is YES, else a NO
 #Not sure if this is the right thing to do although
-testsentence = "I had a nice date with my friend who came from africa"
-testsentence2 = "I was complimented on the sweater I wore to work today"
+testsentence = "my husband called me just to tell me he loved me"
+testsentence2 = "I worked out which always makes me feel good"
+testsentence3 = "Finally got to watch the new Resident Evil movie"
+testsentence4 = "I got to talk to an old friend and reminisce on the good times"
+testsentence5 = "I had a great meeting yesterday at work with my boss and a few colleagues and we went out for lunch afterward everybody was excited by the projects we're working on and how efficient our team is"
+
+
 
 
 social_output1 = predictor.predict(testsentence)['score'][0]
 agency_output1 = predictor.predict(testsentence)['score'][1]
 social_output2 = predictor.predict(testsentence2)['score'][0]
 agency_output2 = predictor.predict(testsentence2)['score'][1]
+social_output3 = predictor.predict(testsentence3)['score'][0]
+agency_output3 = predictor.predict(testsentence3)['score'][1]
+social_output4 = predictor.predict(testsentence4)['score'][0]
+agency_output4 = predictor.predict(testsentence4)['score'][1]
+social_output5 = predictor.predict(testsentence5)['score'][0]
+agency_output5 = predictor.predict(testsentence5)['score'][1]
 
 if social_output1 <= 0.5:
     social_out = "YES"
@@ -239,7 +250,13 @@ if agency_output1 <= 0.5:
 else:
     agency_out = "NO"
 
-print("Social score for test sentence \'{}\', the output is {}".format(testsentence, social_out))
-print("Agency For test sentence \'{}\', the output is {}".format(testsentence, agency_out))
+print("Social score for test sentence \'{}\', the output is {}".format(testsentence, social_output1))
+print("Agency For test sentence \'{}\', the output is {}".format(testsentence, agency_output1))
 print("Social Score for test sentence \'{}\', the output is {}".format(testsentence2, social_output2))
 print("Agency for test sentence \'{}\', the output is {}".format(testsentence2, agency_output2))
+print("Social Score for test sentence \'{}\', the output is {}".format(testsentence3, social_output3))
+print("Agency for test sentence \'{}\', the output is {}".format(testsentence3, agency_output3))
+print("Social Score for test sentence \'{}\', the output is {}".format(testsentence4, social_output4))
+print("Agency for test sentence \'{}\', the output is {}".format(testsentence4, agency_output4))
+print("Social Score for test sentence \'{}\', the output is {}".format(testsentence5, social_output5))
+print("Agency for test sentence \'{}\', the output is {}".format(testsentence5, agency_output5))
