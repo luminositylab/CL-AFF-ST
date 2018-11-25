@@ -1,67 +1,67 @@
 from typing import Iterator, List, Dict
 
+#import statements for torch and parts in it we need
 import torch
 import torch.optim as optim
 import numpy as np
+from torch.autograd import Variable
+import torch.nn.functional as F
 
+
+#AllenNLP imports for dataset stuff
 from allennlp.data import Instance
 from allennlp.data.fields import TextField, LabelField
+#import statement for regular expressions (enables parsing out non alphanumerics)
 import re
-
 from allennlp.data.dataset_readers import DatasetReader
-
 from allennlp.common.file_utils import cached_path
 
+#AllenNLP tokenizing stuff, more dataset related things
 from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
 from allennlp.data.tokenizers import Token
-
 from allennlp.data.vocabulary import Vocabulary
 
+#AllenNLP model stuff
 from allennlp.models import Model
-
 from allennlp.modules.text_field_embedders import TextFieldEmbedder, BasicTextFieldEmbedder
 from allennlp.modules.token_embedders import Embedding
 from allennlp.modules.seq2seq_encoders import Seq2SeqEncoder, PytorchSeq2SeqWrapper
 from allennlp.modules.seq2vec_encoders import Seq2VecEncoder, PytorchSeq2VecWrapper
 from allennlp.nn.util import get_text_field_mask, sequence_cross_entropy_with_logits
-
 from allennlp.training.metrics.mean_absolute_error import MeanAbsoluteError
 from allennlp.training.metrics.boolean_accuracy import BooleanAccuracy  
-
 from allennlp.data.iterators import BucketIterator
-
 from allennlp.training.trainer import Trainer
-
 from allennlp.predictors import SentenceTaggerPredictor
-
-from simple_seq2vec import SentenceSeq2VecPredictor
-
-from torch.autograd import Variable
-import torch.nn.functional as F
-
-#for debug
-import time
-
 
 #elmo boilerplate
 #from allennlp.modules.elmo import Elmo, batch_to_ids
 #options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
 #weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
 
+#Custom seq2vecpredictor implemented based on the seq2seqpredictor example provided by allenNLP
+#(not a big difference)
+from simple_seq2vec import SentenceSeq2VecPredictor
+
+#for debug
+import time
 #torch.manual_seed(1)
+
 
 class CLAFFDatasetReader(DatasetReader):
     """
     DatasetReader for CL-AFF labelled data
         Structure is Number, sentence, concepts, agency, social, ...
-        ex: 27691,"A hot kiss with my girl friend last night made my day","romance","yes","yes",...
-        First line is labels and should be rejected
     """
 
+    #SingleIdTokenIndexer is the class that links each word in the vocabulary to its token
+    #we will be generating ours and thus using the singleidtoken indexer
     def __init__(self, token_indexers: Dict[str, TokenIndexer] = None) -> None:
         super().__init__(lazy=False)
         self.token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
 
+    #this function converts a sentence into the appropriate instance type and has to be adapted to 
+    #the model
     def text_to_instance(self, tokens: List[Token], agency:str = None, social:str = None) -> Instance:
         sentence_field = TextField(tokens, self.token_indexers)
         fields = {"sentence": sentence_field}
@@ -76,6 +76,10 @@ class CLAFFDatasetReader(DatasetReader):
 
         return Instance(fields)
 
+    #this is the outermost function and it gets automatically called at the reader.read() step in main
+    #it yields the outputs of text_to_instance which produces instance objects containing the keyed values
+    #for agency, social, and the sentence itself as an iterator of instances. This fxn depends on the dataset
+    #in use.
     def _read(self, file_path: str) -> Iterator[Instance]:
         with open(file_path) as f:
             #skip line one, check if labeled set
@@ -130,7 +134,12 @@ class LstmSocialAgency(Model):
         self.softmax = torch.nn.Softmax(dim=0)
 
 
-
+    #I have gathered that the trainer method from allenNLP goes through the forward, loss = backward
+    #sequence on its own and it searches for the keys in the instances that get passed as the arguments to
+    #forward. It also automatically will convert labelField values from their number to their torch.Tensor
+    #value when they get passed in, and will pass sentences as dictionaries of words tied to their torch tensor
+    #token values. Inside the trainer function the unwrapping of and iterating over of instances is handled, so
+    #we implement our forward pass function on the batched set of sentences level.
     def forward(self,
                 sentence: Dict[str, torch.Tensor],
                 agency: torch.Tensor = None,
@@ -140,17 +149,23 @@ class LstmSocialAgency(Model):
         #Convert input into word embeddings
         embeddings = self.word_embeddings(sentence)
 
+        #for certain debugging purposes
         #time.sleep(20)
 
+        #the encoder is the name for the sequential model we plug in here. Once we implement the filterbank of
+        #dilated convolutions, the encoder will be that rather than an LSTM.
+        #Since we use a Seq2VecEncoder as input, the last hidden state of the LSTM is returned as the output
         encoder_out = self.encoder(embeddings, mask)
 
-        loutput = self.hidden2tag(encoder_out)
-        
+        #the output from hidden2tag, a fully-connected linear layer converting the LSTM hidden state to 
+        #the two labels
+        lin_output = self.hidden2tag(encoder_out)
+
         #output_score is a list of 2 variables which update the scores for social and agency class 
-        output_score = loutput
+        #output_score = lin_output
         #output_score = self.sigmoid(output_score)
         
-        output_score = torch.sigmoid(output_score)
+        output_score = torch.sigmoid(lin_output)
         output = {"score": output_score}
         #output_score = torch.sigmoid(output_score)
 
@@ -176,7 +191,8 @@ class LstmSocialAgency(Model):
         return {"accuracy": self.accuracy.get_metric(reset) }
 
 
-
+#this is all to handle reading in the dataset and prepping the vocab for use. This will probably change slightly
+#with the ELMo embeddings.
 reader = CLAFFDatasetReader()
 
 train_dataset = reader.read(cached_path('csv/labeled_9k5.csv'))
@@ -192,14 +208,16 @@ token_embedding = Embedding(num_embeddings=vocab.get_vocab_size('tokens'),
                             embedding_dim=EMBEDDING_DIM)
 word_embeddings = BasicTextFieldEmbedder({"tokens": token_embedding})
 
+#initialize the model layers that we will want to change. 
 lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True))
-
+##################for dilated convolutions we will be replacing lstm with our custom layer########################
 model= LstmSocialAgency(word_embeddings, lstm, vocab)
 
-#Chnage the optimizaer function here
+#Set the optimizaer function here
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
 #optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
+# nice iterator functions are pretty much the only reason to stick with AllenNLP rn
 iterator = BucketIterator(batch_size=100, sorting_keys=[("sentence", "num_tokens")])
 
 iterator.index_with(vocab)
@@ -218,6 +236,8 @@ trainer.train()
 #Predictor working as expected, returns a dictionary as output which is list with scores of social and agency
 predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
+
+#battery of testing functions. At this point we can also implement the code to read in the test set for computing our system runs
 #If the score value is <0.5 the label is YES, else a NO
 #Not sure if this is the right thing to do although
 testsentence = "my husband called me just to tell me he loved me"
