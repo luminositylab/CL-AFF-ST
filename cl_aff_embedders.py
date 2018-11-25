@@ -1,147 +1,132 @@
-import io
-import tarfile
-import zipfile
-import bz2
-import lzma
-import gzip
-import re
-import logging
+from typing import Dict, List
 import warnings
-import itertools
-from typing import Optional, Tuple, Sequence, cast, IO, Iterator, Any, NamedTuple
 
-from overrides import overrides
-import numpy
 import torch
-from torch.nn.functional import embedding
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=FutureWarning)
-    import h5py
+from overrides import overrides
 
-from allennlp.common import Params, Tqdm
+from allennlp.common import Params
 from allennlp.common.checks import ConfigurationError
-from allennlp.common.file_utils import get_file_extension, cached_path
 from allennlp.data import Vocabulary
-from allennlp.modules.token_embedders.token_embedder import TokenEmbedder
+from allennlp.modules.text_field_embedders.text_field_embedder import TextFieldEmbedder
 from allennlp.modules.time_distributed import TimeDistributed
-
-#elmo boilerplate
-from allennlp.modules.elmo import Elmo, batch_to_ids
-
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+from allennlp.modules.token_embedders.token_embedder import TokenEmbedder
 
 
-@TokenEmbedder.register("elmoemb")
-class ELMoEmb(TokenEmbedder):
+@TextFieldEmbedder.register("elmoemb")
+class ELMoTextFieldEmbedder(TextFieldEmbedder):
     """
-    A more featureful embedding module than the default in Pytorch.  Adds the ability to:
-        1. embed higher-order inputs
-        2. pre-specify the weight matrix
-        3. use a non-trainable embedding
-        4. project the resultant embeddings to some other dimension (which only makes sense with
-           non-trainable embeddings).
-        5. build all of this easily ``from_params``
-    Note that if you are using our data API and are trying to embed a
-    :class:`~allennlp.data.fields.TextField`, you should use a
-    :class:`~allennlp.modules.TextFieldEmbedder` instead of using this directly.
+    This is a ``TextFieldEmbedder`` that wraps a collection of :class:`TokenEmbedder` objects.  Each
+    ``TokenEmbedder`` embeds or encodes the representation output from one
+    :class:`~allennlp.data.TokenIndexer`.  As the data produced by a
+    :class:`~allennlp.data.fields.TextField` is a dictionary mapping names to these
+    representations, we take ``TokenEmbedders`` with corresponding names.  Each ``TokenEmbedders``
+    embeds its input, and the result is concatenated in an arbitrary order.
     Parameters
     ----------
-    num_embeddings : int:
-        Size of the dictionary of embeddings (vocabulary size).
-    embedding_dim : int
-        The size of each embedding vector.
-    projection_dim : int, (optional, default=None)
-        If given, we add a projection layer after the embedding layer.  This really only makes
-        sense if ``trainable`` is ``False``.
-    weight : torch.FloatTensor, (optional, default=None)
-        A pre-initialised weight matrix for the embedding lookup, allowing the use of
-        pretrained vectors.
-    padding_index : int, (optional, default=None)
-        If given, pads the output with zeros whenever it encounters the index.
-    trainable : bool, (optional, default=True)
-        Whether or not to optimize the embedding parameters.
-    max_norm : float, (optional, default=None)
-        If given, will renormalize the embeddings to always have a norm lesser than this
-    norm_type : float, (optional, default=2):
-        The p of the p-norm to compute for the max_norm option
-    scale_grad_by_freq : boolean, (optional, default=False):
-        If given, this will scale gradients by the frequency of the words in the mini-batch.
-    sparse : bool, (optional, default=False):
-        Whether or not the Pytorch backend should use a sparse representation of the embedding weight.
-    Returns
-    -------
-    An Embedding module.
+    token_embedders : ``Dict[str, TokenEmbedder]``, required.
+        A dictionary mapping token embedder names to implementations.
+        These names should match the corresponding indexer used to generate
+        the tensor passed to the TokenEmbedder.
+    embedder_to_indexer_map : ``Dict[str, List[str]]``, optional, (default = None)
+        Optionally, you can provide a mapping between the names of the TokenEmbedders
+        that you are using to embed your TextField and an ordered list of indexer names
+        which are needed for running it. In most cases, your TokenEmbedder will only
+        require a single tensor, because it is designed to run on the output of a
+        single TokenIndexer. For example, the ELMo Token Embedder can be used in
+        two modes, one of which requires both character ids and word ids for the
+        same text. Note that the list of token indexer names is `ordered`, meaning
+        that the tensors produced by the indexers will be passed to the embedders
+        in the order you specify in this list.
+    allow_unmatched_keys : ``bool``, optional (default = False)
+        If True, then don't enforce the keys of the ``text_field_input`` to
+        match those in ``token_embedders`` (useful if the mapping is specified
+        via ``embedder_to_indexer_map``).
     """
-
     def __init__(self,
-                 num_embeddings: int,
-                 embedding_dim: int,
-                 projection_dim: int = None,
-                 weight: torch.FloatTensor = None,
-                 padding_index: int = None,
-                 trainable: bool = True,
-                 max_norm: float = None,
-                 norm_type: float = 2.,
-                 scale_grad_by_freq: bool = False,
-                 sparse: bool = False) -> None:
-        super(Embedding, self).__init__()
-        self.num_embeddings = num_embeddings
-        self.padding_index = padding_index
-        self.max_norm = max_norm
-        self.norm_type = norm_type
-        self.scale_grad_by_freq = scale_grad_by_freq
-        self.sparse = sparse
-
-        self.output_dim = projection_dim or embedding_dim
-
-        if weight is None:
-            weight = torch.FloatTensor(num_embeddings, embedding_dim)
-            self.weight = torch.nn.Parameter(weight, requires_grad=trainable)
-            torch.nn.init.xavier_uniform_(self.weight)
-        else:
-            if weight.size() != (num_embeddings, embedding_dim):
-                raise ConfigurationError("A weight matrix was passed with contradictory embedding shapes.")
-            self.weight = torch.nn.Parameter(weight, requires_grad=trainable)
-
-        if self.padding_index is not None:
-            self.weight.data[self.padding_index].fill_(0)
-
-        if projection_dim:
-            self._projection = torch.nn.Linear(embedding_dim, projection_dim)
-        else:
-            self._projection = None
-        print("Downloading the options file for ELMo...")
-        options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
-        print("Downloading the weight file for ELMo...")
-        weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
-        print("Done.")
-
-        #pass in the vocabulary for pre-caching with the ELMo model
-        self.elmo = Elmo(options_file, weight_file, 1, dropout=0)
-
+                 token_embedders: Dict[str, TokenEmbedder],
+                 embedder_to_indexer_map: Dict[str, List[str]] = None,
+                 allow_unmatched_keys: bool = False) -> None:
+        super(ELMoTextFieldEmbedder, self).__init__()
+        self._token_embedders = token_embedders
+        self._embedder_to_indexer_map = embedder_to_indexer_map
+        for key, embedder in token_embedders.items():
+            name = 'token_embedder_%s' % key
+            self.add_module(name, embedder)
+        self._allow_unmatched_keys = allow_unmatched_keys
 
     @overrides
     def get_output_dim(self) -> int:
-        return self.output_dim
+        output_dim = 0
+        for embedder in self._token_embedders.values():
+            output_dim += embedder.get_output_dim()
+        return output_dim
 
-    @overrides
-    def forward(self, inputs):  # pylint: disable=arguments-differ
-        original_inputs = inputs
-        if original_inputs.dim() > 2:
-            inputs = inputs.view(-1, inputs.size(-1))
-        #we need to process the input words into the vector
-        #test 1: it should be the case that the character ids are already properly stored in a way that ELMo
-        #can parse. In the tutorial, the instances are keyed as "elmo" rather than sentence.
-        #2. convert words to character ids
-        character_ids = batch_to_ids(sentences)
-        #3. feed character ids into the elmo layer
-        embedded = self.elmo(character_ids)
-        if original_inputs.dim() > 2:
-            view_args = list(original_inputs.size()) + [embedded.size(-1)]
-            embedded = embedded.view(*view_args)
-        if self._projection:
-            projection = self._projection
-            for _ in range(embedded.dim() - 2):
-                projection = TimeDistributed(projection)
-            embedded = projection(embedded)
-        return embedded
+    def forward(self, text_field_input: Dict[str, torch.Tensor], num_wrapping_dims: int = 0) -> torch.Tensor:
+        if self._token_embedders.keys() != text_field_input.keys():
+            if not self._allow_unmatched_keys:
+                message = "Mismatched token keys: %s and %s" % (str(self._token_embedders.keys()),
+                                                                str(text_field_input.keys()))
+                raise ConfigurationError(message)
+        embedded_representations = []
+        keys = sorted(self._token_embedders.keys())
+        for key in keys:
+            # If we pre-specified a mapping explictly, use that.
+            if self._embedder_to_indexer_map is not None:
+                tensors = [text_field_input[indexer_key] for
+                           indexer_key in self._embedder_to_indexer_map[key]]
+            else:
+                # otherwise, we assume the mapping between indexers and embedders
+                # is bijective and just use the key directly.
+                tensors = [text_field_input[key]]
+            # Note: need to use getattr here so that the pytorch voodoo
+            # with submodules works with multiple GPUs.
+            embedder = getattr(self, 'token_embedder_{}'.format(key))
+            for _ in range(num_wrapping_dims):
+                embedder = TimeDistributed(embedder)
+            token_vectors = embedder(*tensors)['elmo_representations'][0]
+            #print(token_vectors)
+            embedded_representations.append(token_vectors)
+        return torch.cat(embedded_representations, dim=-1)
+
+    # This is some unusual logic, it needs a custom from_params.
+    @classmethod
+    def from_params(cls, vocab: Vocabulary, params: Params) -> 'BasicTextFieldEmbedder':  # type: ignore
+        # pylint: disable=arguments-differ,bad-super-call
+
+        # The original `from_params` for this class was designed in a way that didn't agree
+        # with the constructor. The constructor wants a 'token_embedders' parameter that is a
+        # `Dict[str, TokenEmbedder]`, but the original `from_params` implementation expected those
+        # key-value pairs to be top-level in the params object.
+        #
+        # This breaks our 'configuration wizard' and configuration checks. Hence, going forward,
+        # the params need a 'token_embedders' key so that they line up with what the constructor wants.
+        # For now, the old behavior is still supported, but produces a DeprecationWarning.
+
+        embedder_to_indexer_map = params.pop("embedder_to_indexer_map", None)
+        if embedder_to_indexer_map is not None:
+            embedder_to_indexer_map = embedder_to_indexer_map.as_dict(quiet=True)
+        allow_unmatched_keys = params.pop_bool("allow_unmatched_keys", False)
+
+        token_embedder_params = params.pop('token_embedders', None)
+
+        if token_embedder_params is not None:
+            # New way: explicitly specified, so use it.
+            token_embedders = {
+                    name: TokenEmbedder.from_params(subparams, vocab=vocab)
+                    for name, subparams in token_embedder_params.items()
+            }
+
+        else:
+            # Warn that the original behavior is deprecated
+            warnings.warn(DeprecationWarning("the token embedders for BasicTextFieldEmbedder should now "
+                                             "be specified as a dict under the 'token_embedders' key, "
+                                             "not as top-level key-value pairs"))
+
+            token_embedders = {}
+            keys = list(params.keys())
+            for key in keys:
+                embedder_params = params.pop(key)
+                token_embedders[key] = TokenEmbedder.from_params(vocab=vocab, params=embedder_params)
+
+        params.assert_empty(cls.__name__)
+        return cls(token_embedders, embedder_to_indexer_map, allow_unmatched_keys)

@@ -40,6 +40,8 @@ from simple_seq2vec import SentenceSeq2VecPredictor
 
 #ELMo stuff
 from allennlp.data.token_indexers.elmo_indexer import ELMoCharacterMapper, ELMoTokenCharactersIndexer
+from allennlp.modules.elmo import Elmo, batch_to_ids
+from cl_aff_embedders import ELMoTextFieldEmbedder
 
 #for debug
 import time
@@ -192,6 +194,15 @@ class LstmSocialAgency(Model):
         return {"accuracy": self.accuracy.get_metric(reset) }
 
 
+################################EITHER USE THIS OR THE cl_aff_embedders.py ELMo embedder######################
+print("Downloading the options file for ELMo...")
+options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
+print("Downloading the weight file for ELMo...")
+weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
+print("Done.")
+elmo = Elmo(options_file, weight_file, 1, dropout=0)
+##############################################################################################################
+
 #this is all to handle reading in the dataset and prepping the vocab for use. This will probably change slightly
 #with the ELMo embeddings.
 reader = CLAFFDatasetReaderELMo()
@@ -201,13 +212,11 @@ validation_dataset = reader.read(cached_path('csv/labeled_k5.csv'))
 
 vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
 
-EMBEDDING_DIM = 20
-HIDDEN_DIM = 5
+#word_embeddings = BasicTextFieldEmbedder({"character_ids": elmo})
+word_embeddings = ELMoTextFieldEmbedder({"character_ids": elmo})
 
-token_embedding = Embedding(num_embeddings=vocab.get_vocab_size('tokens'),
-                            embedding_dim=EMBEDDING_DIM)
-word_embeddings = TextFieldELMoEmbedder({"tokens": token_embedding})
-#word_embeddings = BasicTextFieldEmbedder({"tokens": token_embedding})
+EMBEDDING_DIM = elmo.get_output_dim()
+HIDDEN_DIM = 50
 
 #initialize the model layers that we will want to change. 
 lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True))
