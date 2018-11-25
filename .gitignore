@@ -2,3 +2,5 @@ labeled_10k.csv
 unlabeled*
 *.txt
 *.pyc
+__pycache__
+old/
