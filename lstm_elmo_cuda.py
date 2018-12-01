@@ -36,13 +36,13 @@ from allennlp.predictors import SentenceTaggerPredictor
 
 #Custom seq2vecpredictor implemented based on the seq2seqpredictor example provided by allenNLP
 #(not a big difference)
-from simple_seq2vec import SentenceSeq2VecPredictor
+from cl_aff_utils.predictors import SentenceSeq2VecPredictor
+from cl_aff_utils.elmo_cuda import Elmo
+from cl_aff_utils.embedders import ELMoTextFieldEmbedder
 
 #ELMo stuff
 from allennlp.data.token_indexers.elmo_indexer import ELMoCharacterMapper, ELMoTokenCharactersIndexer
 from allennlp.modules.elmo import batch_to_ids
-from elmo_cuda import Elmo
-from cl_aff_embedders import ELMoTextFieldEmbedder
 
 #for debug
 import time
