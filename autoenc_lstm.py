@@ -166,7 +166,7 @@ class LstmAutoencoder(Model):
         #the two labels
         lin_output = self.hiddenlayer1(encoder_out)
         encoded = torch.relu(lin_output)
-        decoded = self.decoder(encoded)
+        decoded = (torch.sigmoid(self.decoder(encoded))-0.5)*2
 
         #output_score is a list of 2 variables which update the scores for social and agency class 
         #output_score = lin_output
