@@ -190,10 +190,9 @@ class BigramDilatedConvModel(Model):
         #time.sleep(20)
         #print(embeddings.shape)
 
-        #rather than the encoder we perform the set of convolutions
-
+        #we perform the set of convolutions followed by relu on top of them
         cset_1 = self.conv_filterbank1(embeddings).permute(0,2,1)
-        #cset_1 = self.conv_filterbank_1(cset_1).permute(0,2,1)
+       
         self.relu = torch.nn.ReLU()
         cset_1 = self.relu(cset_1)
         cset_2 = self.conv_filterbank2(embeddings).permute(0,2,1)
@@ -204,45 +203,22 @@ class BigramDilatedConvModel(Model):
         cset_4 = self.relu(cset_4)
         cset_5 = self.conv_filterbank5(embeddings).permute(0,2,1)
         cset_5 = self.relu(cset_5)
-        #cset_1 = cset_1.permute(0,1,2)
-        #print(cset_1.size())
-        #print(cset_2.size())
-        #print(cset_3.size())
-        #print(cset_4.size())
-        #print(cset_5.size())
-
+        
+        #pass the convoluted layers into the encoder 
         encode_out_1 =  self.encoder_1(cset_1, mask)
         encode_out_2 =  self.encoder_2(cset_2,mask)
         encode_out_3 =  self.encoder_3(cset_3, mask)
         encode_out_4 =  self.encoder_4(cset_4, mask)
         encode_out_5 =  self.encoder_5(cset_5, mask)
-        #print("Ecoder1", encode_out_1.size())
         
-        #hidden_representation = torch.cat((cset_1, cset_2, cset_3,cset_4,cset_5), dim=-1)
-        #print(hidden_representation.size())
-        #pool = self.pool1(hidden_representation)
-        #print(pool.size())
-        #pool_1 = self.pool1(cset_1).squeeze()
-        #pool_2 = self.pool2(cset_2).squeeze()
-        #pool_4 = self.pool4(cset_4).squeeze()
-        pool_5 = self.pool5(cset_5).squeeze()
-        #print("POOL:",pool_5.size())
 
-        #drop= self.drop()
-
+  
+        #concat the encoded results
         hidden_representation = torch.cat((encode_out_1,encode_out_2,encode_out_3,encode_out_4,encode_out_5),dim=-1)
-        #hidden_representation = torch.cat((cset_1,cset_2,cset_3,cset_4,cset_5),dim=-1)
+        
        
 
-        #encode_out = self.encoder(hidden_representation, mask)
     
-
-        #print(hidden_representation.size())
-        #encoder_out = self.encoder(hidden_representation, mask)
-        #drop = self.drop(hidden_representation)
-        #print(hidden_representation.shape)
-        #hidden_representation = torch.cat((lin_comp_1,lin_comp_2,lin_comp_3,lin_comp_4,lin_comp_5),dim=1)
-        #encoder_out = torch.nn.ReLU(hidden_representation)
         #the output from hidden2tag, a fully-connected linear layer converting the LSTM hidden state to 
         #the two labels
         #hidden_representation = F.relu(hidden_representation)
