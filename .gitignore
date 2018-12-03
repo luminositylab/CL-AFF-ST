@@ -3,3 +3,4 @@ unlabeled*
 *.pyc
 __pycache__
 old/
+.idea*
