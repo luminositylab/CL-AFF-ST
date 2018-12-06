@@ -333,34 +333,55 @@ test = ["my husband called me just to tell me he loved me", "I worked out which 
  "I got to talk to an old friend and reminisce on the good times", "I had a great meeting yesterday at work with my boss and a few colleagues and we went out for lunch afterward everybody was excited by the projects we're working on and how efficient our team is"]
 
 
-social_output1 = predictor.predict(test[0])['score'][0]
-agency_output1 = predictor.predict(test[0])['score'][1]
-social_output2 = predictor.predict(test[1])['score'][0]
-agency_output2 = predictor.predict(test[1])['score'][1]
-social_output3 = predictor.predict(test[2])['score'][0]
-agency_output3 = predictor.predict(test[2])['score'][1]
-social_output4 = predictor.predict(test[3])['score'][0]
-agency_output4 = predictor.predict(test[3])['score'][1]
-social_output5 = predictor.predict(test[4])['score'][0]
-agency_output5 = predictor.predict(test[4])['score'][1]
+social_score = []
+agency_score = []
 
-if social_output1 <= 0.5:
-    social_out = "YES"
-else:
-    social_out = "NO"
 
-if agency_output1 <= 0.5:
-    agency_out = "YES"
-else:
-    agency_out = "NO"
 
-print("Social score for test sentence \'{}\', the output is {}".format(test[0], social_output1))
-print("Agency For test sentence \'{}\', the output is {}".format(test[0], agency_output1))
-print("Social Score for test sentence \'{}\', the output is {}".format(test[1], social_output2))
-print("Agency for test sentence \'{}\', the output is {}".format(test[1], agency_output2))
-print("Social Score for test sentence \'{}\', the output is {}".format(test[2], social_output3))
-print("Agency for test sentence \'{}\', the output is {}".format(test[2], agency_output3))
-print("Social Score for test sentence \'{}\', the output is {}".format(test[3], social_output4))
-print("Agency for test sentence \'{}\', the output is {}".format(test[3], agency_output4))
-print("Social Score for test sentence \'{}\', the output is {}".format(test[4], social_output5))
-print("Agency for test sentence \'{}\', the output is {}".format(test[4], agency_output5))
+for i in range(len(test)):
+    social_score.append(predictor.predict(test[i])['score'][0])
+    agency_score.append(predictor.predict(test[i])['score'][1])
+
+
+
+
+
+# social_output1 = predictor.predict(test[0])['score'][0]
+# agency_output1 = predictor.predict(test[0])['score'][1]
+# social_output2 = predictor.predict(test[1])['score'][0]
+# agency_output2 = predictor.predict(test[1])['score'][1]
+# social_output3 = predictor.predict(test[2])['score'][0]
+# agency_output3 = predictor.predict(test[2])['score'][1]
+# social_output4 = predictor.predict(test[3])['score'][0]
+# agency_output4 = predictor.predict(test[3])['score'][1]
+# social_output5 = predictor.predict(test[4])['score'][0]
+# agency_output5 = predictor.predict(test[4])['score'][1]
+
+# if social_output1 <= 0.5:
+#     social_out = "YES"
+# else:
+#     social_out = "NO"
+
+# if agency_output1 <= 0.5:
+#     agency_out = "YES"
+# else:
+#     agency_out = "NO"
+
+# social_out = []
+# agency_out = []
+
+for i in range(len(test)):
+    print("Social score for test sentence \'{}\', the output is {}".format(test[i], social_score[i]))
+    print("Agency For test sentence \'{}\', the output is {}".format(test[i], agency_score[i]))
+
+
+# print("Social score for test sentence \'{}\', the output is {}".format(test[0], social_output1))
+# print("Agency For test sentence \'{}\', the output is {}".format(test[0], agency_output1))
+# print("Social Score for test sentence \'{}\', the output is {}".format(test[1], social_output2))
+# print("Agency for test sentence \'{}\', the output is {}".format(test[1], agency_output2))
+# print("Social Score for test sentence \'{}\', the output is {}".format(test[2], social_output3))
+# print("Agency for test sentence \'{}\', the output is {}".format(test[2], agency_output3))
+# print("Social Score for test sentence \'{}\', the output is {}".format(test[3], social_output4))
+# print("Agency for test sentence \'{}\', the output is {}".format(test[3], agency_output4))
+# print("Social Score for test sentence \'{}\', the output is {}".format(test[4], social_output5))
+# print("Agency for test sentence \'{}\', the output is {}".format(test[4], agency_output5))
