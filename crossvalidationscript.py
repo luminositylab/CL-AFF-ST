@@ -1,6 +1,9 @@
 import pandas as pd
 import datetime
+import numpy
 import multiprocessing as mp
+from sklearn.utils import shuffle
+
 
 
 class Dataset():
@@ -12,7 +15,8 @@ def runmodel(dataset):
     #SAXON PUT CODE HERE
     return dataset.number#return accuracy
 df = pd.read_csv('csv/labeled_10k.csv', header=0)
-df.sample(frac=1)
+df = shuffle(df)
+df = df.reset_index(drop=True)
 df.to_csv('csv/rundata/'+datetime.datetime.now().strftime("%Y%m%d-%H%M%S")+'.csv')
 dftest = df.head(1056)
 dftrain=df.iloc[1056:]
