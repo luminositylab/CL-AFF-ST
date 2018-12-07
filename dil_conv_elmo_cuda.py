@@ -130,20 +130,27 @@ class BigramDilatedConvModel(Model):
         super().__init__(vocab)
 
         EMBEDDING_SIZE = 1024
-        CONV_OUTPUT_SIZE = 25
+        WORD_CLASSES = 100
+        CONV_OUTPUT_SIZE = 50
 
         self.word_embeddings = word_embeddings
 
-        self.conv_filterbank1 = torch.nn.Conv1d(EMBEDDING_SIZE,CONV_OUTPUT_SIZE,2,dilation=1,padding=1)
-        self.conv_filterbank2 = torch.nn.Conv1d(EMBEDDING_SIZE,CONV_OUTPUT_SIZE,2,dilation=2,padding=1)
-        self.conv_filterbank3 = torch.nn.Conv1d(EMBEDDING_SIZE,CONV_OUTPUT_SIZE,2,dilation=3,padding=2)
-        self.conv_filterbank4 = torch.nn.Conv1d(EMBEDDING_SIZE,CONV_OUTPUT_SIZE,2,dilation=4,padding=2)
-        self.conv_filterbank5 = torch.nn.Conv1d(EMBEDDING_SIZE,CONV_OUTPUT_SIZE,2,dilation=5,padding=3)
+        self.word_class_probs1 = torch.nn.Linear(in_features = EMBEDDING_SIZE, out_features = WORD_CLASSES)
+        self.word_class_probs2 = torch.nn.Linear(in_features = WORD_CLASSES, out_features = WORD_CLASSES)
+
+        self.conv_filterbank1 = torch.nn.Conv1d(WORD_CLASSES,CONV_OUTPUT_SIZE,2,dilation=1,padding=1)
+        self.conv_filterbank2 = torch.nn.Conv1d(WORD_CLASSES,CONV_OUTPUT_SIZE,2,dilation=2,padding=1)
+        self.conv_filterbank3 = torch.nn.Conv1d(WORD_CLASSES,CONV_OUTPUT_SIZE,2,dilation=3,padding=2)
+        self.conv_filterbank4 = torch.nn.Conv1d(WORD_CLASSES,CONV_OUTPUT_SIZE,2,dilation=4,padding=2)
+        self.conv_filterbank5 = torch.nn.Conv1d(WORD_CLASSES,CONV_OUTPUT_SIZE,2,dilation=5,padding=3)
         self.pool1 = torch.nn.AdaptiveMaxPool1d(1)
         self.pool2 = torch.nn.AdaptiveMaxPool1d(1)
         self.pool3 = torch.nn.AdaptiveMaxPool1d(1)
         self.pool4 = torch.nn.AdaptiveMaxPool1d(1)
         self.pool5 = torch.nn.AdaptiveMaxPool1d(1)
+
+        self.recurrent_pool = torch.nn.LSTM(CONV_OUTPUT_SIZE, CONV_OUTPUT_SIZE, batch_first=True, bidirectional=True)
+
         
         self.hidden2tag = torch.nn.Linear(in_features=CONV_OUTPUT_SIZE*5,
                                           out_features=2)
@@ -164,24 +171,35 @@ class BigramDilatedConvModel(Model):
         #Mask to pad shorter sentences
         mask = get_text_field_mask(sentence).cuda()
         #Convert input into word embeddings
-        embeddings = self.word_embeddings(sentence).permute(0,2,1)
 
+
+
+        embeddings = self.word_embeddings(sentence)
+
+        wordclass1 = torch.nn.functional.relu(self.word_class_probs1(embeddings))
+        #wordclass2 = torch.nn.functional.relu(self.word_class_probs2(wordclass1))
+        #wordclass3 = torch.nn.functional.relu(self.word_class_probs3(wordclass2))
+        #wordclass4 = torch.nn.functional.relu(self.word_class_probs4(wordclass3))
+        #wordclass5 = torch.nn.functional.relu(self.word_class_probs4(wordclass4))
+        final_word_class = torch.sigmoid(self.word_class_probs2(wordclass1)).permute(0,2,1)
         #for certain debugging purposes
         #time.sleep(20)
         #print(embeddings.shape)
 
         #rather than the encoder we perform the set of convolutions
 
-        cset_1 = self.conv_filterbank1(embeddings)
-        cset_2 = self.conv_filterbank2(embeddings)
-        cset_3 = self.conv_filterbank3(embeddings)
-        cset_4 = self.conv_filterbank4(embeddings)
-        cset_5 = self.conv_filterbank5(embeddings)
-        pool_1 = self.pool1(cset_1).squeeze()
-        pool_2 = self.pool2(cset_2).squeeze()
-        pool_3 = self.pool3(cset_3).squeeze()
-        pool_4 = self.pool4(cset_4).squeeze()
-        pool_5 = self.pool5(cset_5).squeeze()
+
+
+        cset_1 = self.conv_filterbank1(final_word_class).permute(0,2,1)
+        cset_2 = self.conv_filterbank2(final_word_class).permute(0,2,1)
+        cset_3 = self.conv_filterbank3(final_word_class).permute(0,2,1)
+        cset_4 = self.conv_filterbank4(final_word_class).permute(0,2,1)
+        cset_5 = self.conv_filterbank5(final_word_class).permute(0,2,1)
+        pool_1 = torch.sum(self.recurrent_pool(cset_1)[1][0],dim=0).squeeze()
+        pool_2 = torch.sum(self.recurrent_pool(cset_2)[1][0],dim=0).squeeze()
+        pool_3 = torch.sum(self.recurrent_pool(cset_3)[1][0],dim=0).squeeze()
+        pool_4 = torch.sum(self.recurrent_pool(cset_4)[1][0],dim=0).squeeze()
+        pool_5 = torch.sum(self.recurrent_pool(cset_5)[1][0],dim=0).squeeze()
 
         hidden_representation = torch.cat((pool_1,pool_2,pool_3,pool_4,pool_5),dim=-1)
         #print(hidden_representation.shape)
@@ -260,7 +278,7 @@ optimizer = optim.Adam(model.parameters(), lr=0.0001)
 move_optimizer_to_cuda(optimizer)
 
 # nice iterator functions are pretty much the only reason to stick with AllenNLP rn
-iterator = BucketIterator(batch_size=100, sorting_keys=[("sentence", "num_tokens")])
+iterator = BucketIterator(batch_size=50, sorting_keys=[("sentence", "num_tokens")])
 
 iterator.index_with(vocab)
 
@@ -269,7 +287,7 @@ trainer = Trainer(model=model,
                   iterator=iterator,
                   train_dataset=train_dataset,
                   validation_dataset=validation_dataset,
-                  patience=10,
+                  patience=50,
                   num_epochs=500)
 
 trainer.train()
