@@ -47,6 +47,7 @@ from cl_aff_utils.embedders import ELMoTextFieldEmbedder
 
 #for debug
 import time
+import csv
 #torch.manual_seed(1)
 
 cuda = torch.device('cuda')
@@ -296,7 +297,7 @@ model= BigramDilatedConvModel(word_embeddings,lstm, vocab)
 model.cuda()
 
 #Set the optimizaer function here
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
+optimizer = optim.Adam(model.parameters(), lr=0.1)
 #optimizer = optim.Adam(model.parameters(), lr=0.0001)
 move_optimizer_to_cuda(optimizer)
 
@@ -329,21 +330,53 @@ testsentence3 = "Finally got to watch the new Resident Evil movie"
 testsentence4 = "I got to talk to an old friend and reminisce on the good times"
 testsentence5 = "I had a great meeting yesterday at work with my boss and a few colleagues and we went out for lunch afterward everybody was excited by the projects we're working on and how efficient our team is"
 
-test = ["my husband called me just to tell me he loved me", "I worked out which always makes me feel good", "Finally got to watch the new Resident Evil movie",
- "I got to talk to an old friend and reminisce on the good times", "I had a great meeting yesterday at work with my boss and a few colleagues and we went out for lunch afterward everybody was excited by the projects we're working on and how efficient our team is"]
 
+
+
+
+
+#test = ["my husband called me just to tell me he loved me", "I worked out which always makes me feel good", "Finally got to watch the new Resident Evil movie",
+ #"I got to talk to an old friend and reminisce on the good times", "I had a great meeting yesterday at work with my boss and a few colleagues and we went out for lunch afterward everybody was excited by the projects we're working on and how efficient our team is"]
+test = []
+
+
+
+#data_set = []
+with open('csv/test_17k.csv',encoding="utf8", errors='ignore') as csvfile:
+        readCSV = csv.reader(csvfile, delimiter=',')
+        header = next(readCSV)
+        for row in readCSV:
+            #row = [i for i in row]
+            
+            #print(row[1])
+            test.append(row[1])
 
 social_score = []
 agency_score = []
-
+social_tag = []
+agency_tag = []
 
 
 for i in range(len(test)):
+    print("Processing test datapoint {}...".format(test[i]))
     social_score.append(predictor.predict(test[i])['score'][0])
     agency_score.append(predictor.predict(test[i])['score'][1])
 
+    if predictor.predict(test[i])['score'][0] < 0.5:
+        social_tag.append("Yes")
+    else:
+        social_tag.append("No")
+
+    if predictor.predict(test[i])['score'][1] < 0.5:
+        agency_tag.append("Yes")
+    else:
+        agency_tag.append("No")
 
 
+print(social_score)
+print(agency_score)
+print(social_tag)
+print(agency_tag)
 
 
 # social_output1 = predictor.predict(test[0])['score'][0]
@@ -370,9 +403,9 @@ for i in range(len(test)):
 # social_out = []
 # agency_out = []
 
-for i in range(len(test)):
-    print("Social score for test sentence \'{}\', the output is {}".format(test[i], social_score[i]))
-    print("Agency For test sentence \'{}\', the output is {}".format(test[i], agency_score[i]))
+# for i in range(len(test)):
+#     print("Social score for test sentence \'{}\', the output is {}".format(test[i], social_score[i]))
+#     print("Agency For test sentence \'{}\', the output is {}".format(test[i], agency_score[i]))
 
 
 # print("Social score for test sentence \'{}\', the output is {}".format(test[0], social_output1))
