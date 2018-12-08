@@ -25,6 +25,7 @@ df=df.append(dftest)
 datasets = []
 for x in range(10):
     dftest = df.head(1056)
+    print(dftest)
     dftrain=df.iloc[1056:]
     df=dftrain
     df=df.append(dftest)
