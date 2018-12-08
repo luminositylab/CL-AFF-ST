@@ -48,6 +48,7 @@ from cl_aff_utils.embedders import ELMoTextFieldEmbedder
 #for debug
 import time
 import csv
+import pandas as pd
 #torch.manual_seed(1)
 
 cuda = torch.device('cuda')
@@ -297,7 +298,7 @@ model= BigramDilatedConvModel(word_embeddings,lstm, vocab)
 model.cuda()
 
 #Set the optimizaer function here
-optimizer = optim.Adam(model.parameters(), lr=0.1)
+optimizer = optim.Adam(model.parameters(), lr=0.0001)
 #optimizer = optim.Adam(model.parameters(), lr=0.0001)
 move_optimizer_to_cuda(optimizer)
 
@@ -324,32 +325,17 @@ predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 #battery of testing functions. At this point we can also implement the code to read in the test set for computing our system runs
 #If the score value is <0.5 the label is YES, else a NO
 #Not sure if this is the right thing to do although
-testsentence = "my husband called me just to tell me he loved me"
-testsentence2 = "I worked out which always makes me feel good"
-testsentence3 = "Finally got to watch the new Resident Evil movie"
-testsentence4 = "I got to talk to an old friend and reminisce on the good times"
-testsentence5 = "I had a great meeting yesterday at work with my boss and a few colleagues and we went out for lunch afterward everybody was excited by the projects we're working on and how efficient our team is"
 
 
 
-
-
-
-#test = ["my husband called me just to tell me he loved me", "I worked out which always makes me feel good", "Finally got to watch the new Resident Evil movie",
- #"I got to talk to an old friend and reminisce on the good times", "I had a great meeting yesterday at work with my boss and a few colleagues and we went out for lunch afterward everybody was excited by the projects we're working on and how efficient our team is"]
+#Test has list of all test sentences
 test = []
-
-
-
-#data_set = []
 with open('csv/test_17k.csv',encoding="utf8", errors='ignore') as csvfile:
         readCSV = csv.reader(csvfile, delimiter=',')
         header = next(readCSV)
         for row in readCSV:
-            #row = [i for i in row]
-            
-            #print(row[1])
             test.append(row[1])
+
 
 social_score = []
 agency_score = []
@@ -357,10 +343,12 @@ social_tag = []
 agency_tag = []
 
 
+#Assign yes/no label based on the prediction
 for i in range(len(test)):
     print("Processing test datapoint {}...".format(test[i]))
-    social_score.append(predictor.predict(test[i])['score'][0])
-    agency_score.append(predictor.predict(test[i])['score'][1])
+    print("Number:", i)
+    #social_score.append(predictor.predict(test[i])['score'][0])
+    #agency_score.append(predictor.predict(test[i])['score'][1])
 
     if predictor.predict(test[i])['score'][0] < 0.5:
         social_tag.append("Yes")
@@ -373,48 +361,16 @@ for i in range(len(test)):
         agency_tag.append("No")
 
 
-print(social_score)
-print(agency_score)
-print(social_tag)
-print(agency_tag)
+
+#Make a dict for output
+d = {'Sentence':test,'Social':social_tag, 'Agency':agency_tag}
+df = pd.DataFrame(d)
+print(df)
+
+#Save the sentence, social prediction, agency prediction on the test set in a csv file 
+df.to_csv("test_results.csv",sep=',', index=False)
 
 
-# social_output1 = predictor.predict(test[0])['score'][0]
-# agency_output1 = predictor.predict(test[0])['score'][1]
-# social_output2 = predictor.predict(test[1])['score'][0]
-# agency_output2 = predictor.predict(test[1])['score'][1]
-# social_output3 = predictor.predict(test[2])['score'][0]
-# agency_output3 = predictor.predict(test[2])['score'][1]
-# social_output4 = predictor.predict(test[3])['score'][0]
-# agency_output4 = predictor.predict(test[3])['score'][1]
-# social_output5 = predictor.predict(test[4])['score'][0]
-# agency_output5 = predictor.predict(test[4])['score'][1]
-
-# if social_output1 <= 0.5:
-#     social_out = "YES"
-# else:
-#     social_out = "NO"
-
-# if agency_output1 <= 0.5:
-#     agency_out = "YES"
-# else:
-#     agency_out = "NO"
-
-# social_out = []
-# agency_out = []
-
-# for i in range(len(test)):
-#     print("Social score for test sentence \'{}\', the output is {}".format(test[i], social_score[i]))
-#     print("Agency For test sentence \'{}\', the output is {}".format(test[i], agency_score[i]))
 
 
-# print("Social score for test sentence \'{}\', the output is {}".format(test[0], social_output1))
-# print("Agency For test sentence \'{}\', the output is {}".format(test[0], agency_output1))
-# print("Social Score for test sentence \'{}\', the output is {}".format(test[1], social_output2))
-# print("Agency for test sentence \'{}\', the output is {}".format(test[1], agency_output2))
-# print("Social Score for test sentence \'{}\', the output is {}".format(test[2], social_output3))
-# print("Agency for test sentence \'{}\', the output is {}".format(test[2], agency_output3))
-# print("Social Score for test sentence \'{}\', the output is {}".format(test[3], social_output4))
-# print("Agency for test sentence \'{}\', the output is {}".format(test[3], agency_output4))
-# print("Social Score for test sentence \'{}\', the output is {}".format(test[4], social_output5))
-# print("Agency for test sentence \'{}\', the output is {}".format(test[4], agency_output5))
+
