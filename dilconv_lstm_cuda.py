@@ -49,6 +49,7 @@ from cl_aff_utils.embedders import ELMoTextFieldEmbedder
 import time
 import csv
 import pandas as pd
+import re
 #torch.manual_seed(1)
 
 cuda = torch.device('cuda')
@@ -329,6 +330,26 @@ predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 
 
 #Test has list of all test sentences
+
+def clean_str(string):
+ 
+    string = re.sub(r"\. \. \.", "\.", string)
+    string = re.sub(r"[^A-Za-z0-9(),!?\'\`\.]", " ", string)
+    # string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)
+    string = re.sub(r"\'s", " \'s", string)
+    string = re.sub(r"\'ve", " \'ve", string)
+    string = re.sub(r"n\'t", " n\'t", string)
+    string = re.sub(r"\'re", " \'re", string)
+    string = re.sub(r"\'d", " \'d", string)
+    string = re.sub(r"\'ll", " \'ll", string)
+    string = re.sub(r",", " , ", string)
+    string = re.sub(r"!", " ! ", string)
+    string = re.sub(r"\(", " ( ", string)
+    string = re.sub(r"\)", " ) ", string)
+    string = re.sub(r"\?", " ? ", string)
+    string = re.sub(r"\s{2,}", " ", string)
+    return string.strip().lower()
+
 test = []
 with open('csv/test_17k.csv',encoding="utf8", errors='ignore') as csvfile:
         readCSV = csv.reader(csvfile, delimiter=',')
@@ -336,6 +357,8 @@ with open('csv/test_17k.csv',encoding="utf8", errors='ignore') as csvfile:
         for row in readCSV:
             test.append(row[1])
 
+for i in range(len(test)):
+    test[i] =  clean_str(test[i])
 
 social_score = []
 agency_score = []
