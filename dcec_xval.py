@@ -51,8 +51,6 @@ from cl_aff_utils.embedders import ELMoTextFieldEmbedder
 import time
 #torch.manual_seed(1)
 
-cuda = torch.device('cuda')
-
 class CLAFFDatasetReaderELMo(DatasetReader):
     """
     DatasetReader for CL-AFF labelled data
@@ -300,103 +298,90 @@ class BigramDilatedConvModel(Model):
         return {"accuracy": self.accuracy.get_metric(reset) }
 
 
-torch.set_default_tensor_type(torch.cuda.FloatTensor)
+class model_evaluator():
+    def __init__(train_df: pd.DataFrame, test_df: pd.DataFrame):
+        cuda = torch.device('cuda')
 
-################################EITHER USE THIS OR THE cl_aff_embedders.py ELMo embedder######################
-print("Downloading the options file for ELMo...")
-options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
-print("Downloading the weight file for ELMo...")
-weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
-print("Done.")
-elmo = Elmo(options_file, weight_file, 1, dropout=0)
-##############################################################################################################
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-elmo.cuda()
+        ################################EITHER USE THIS OR THE cl_aff_embedders.py ELMo embedder######################
+        print("Downloading the options file for ELMo...")
+        options_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_options.json"
+        print("Downloading the weight file for ELMo...")
+        weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
+        print("Done.")
+        elmo = Elmo(options_file, weight_file, 1, dropout=0)
+        ##############################################################################################################
 
-#this is all to handle reading in the dataset and prepping the vocab for use. This will probably change slightly
-#with the ELMo embeddings.
-reader = CLAFFDatasetReaderELMo()
+        elmo.cuda()
 
-train_dataset = reader.read(cached_path('csv/labeled_9k5.csv'))
-validation_dataset = reader.read(cached_path('csv/labeled_k5.csv'))
+        #this is all to handle reading in the dataset and prepping the vocab for use. This will probably change slightly
+        #with the ELMo embeddings.
+        self.reader = CLAFFDatasetReaderELMo()
 
-vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
+        train_dataset = self.reader.read(cached_path('csv/labeled_9k5.csv'))
+        validation_dataset = self.reader.read(cached_path('csv/labeled_k5.csv'))
 
-#word_embeddings = BasicTextFieldEmbedder({"character_ids": elmo})
-word_embeddings = ELMoTextFieldEmbedder({"character_ids": elmo})
+        vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
 
-#initialize the model layers that we will want to change. 
-#lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True))
-################## for dilated convolutions we will be replacing lstm with our custom layer ##################
-model= BigramDilatedConvModel(word_embeddings, vocab)
+        #word_embeddings = BasicTextFieldEmbedder({"character_ids": elmo})
+        word_embeddings = ELMoTextFieldEmbedder({"character_ids": elmo})
 
-model.cuda()
+        #initialize the model layers that we will want to change. 
+        #lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True))
+        ################## for dilated convolutions we will be replacing lstm with our custom layer ##################
+        self.model= BigramDilatedConvModel(word_embeddings, vocab)
 
-#Set the optimizaer function here
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
-#optimizer = optim.Adam(model.parameters(), lr=0.0001)
-move_optimizer_to_cuda(optimizer)
+        self.model.cuda()
 
-# nice iterator functions are pretty much the only reason to stick with AllenNLP rn
-iterator = BucketIterator(batch_size=50, sorting_keys=[("sentence", "num_tokens")])
+        #Set the optimizaer function here
+        optimizer = optim.Adam(model.parameters(), lr=0.0001)
+        #optimizer = optim.Adam(model.parameters(), lr=0.0001)
+        move_optimizer_to_cuda(optimizer)
 
-iterator.index_with(vocab)
+        # nice iterator functions are pretty much the only reason to stick with AllenNLP rn
+        iterator = BucketIterator(batch_size=50, sorting_keys=[("sentence", "num_tokens")])
 
-trainer = Trainer(model=model,
-                  optimizer=optimizer,
-                  iterator=iterator,
-                  train_dataset=train_dataset,
-                  validation_dataset=validation_dataset,
-                  patience=50,
-                  num_epochs=500)
+        iterator.index_with(vocab)
 
-trainer.train()
+        self.trainer = Trainer(model=self.model,
+                          optimizer=optimizer,
+                          iterator=iterator,
+                          train_dataset=train_dataset,
+                          validation_dataset=validation_dataset,
+                          patience=50,
+                          num_epochs=500)
 
-
-#Predictor working as expected, returns a dictionary as output which is list with scores of social and agency
-predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
-
-
-#battery of testing functions. At this point we can also implement the code to read in the test set for computing our system runs
-#If the score value is <0.5 the label is YES, else a NO
-#Not sure if this is the right thing to do although
-testsentence = "my husband called me just to tell me he loved me"
-testsentence2 = "I worked out which always makes me feel good"
-testsentence3 = "Finally got to watch the new Resident Evil movie"
-testsentence4 = "I got to talk to an old friend and reminisce on the good times"
-testsentence5 = "I had a great meeting yesterday at work with my boss and a few colleagues and we went out for lunch afterward everybody was excited by the projects we're working on and how efficient our team is"
+        self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)
+        self.trained = False
 
 
+    def train():
+        self.trainer.train()
+        self.trained = True
 
 
-social_output1 = predictor.predict(testsentence)['score'][0]
-agency_output1 = predictor.predict(testsentence)['score'][1]
-social_output2 = predictor.predict(testsentence2)['score'][0]
-agency_output2 = predictor.predict(testsentence2)['score'][1]
-social_output3 = predictor.predict(testsentence3)['score'][0]
-agency_output3 = predictor.predict(testsentence3)['score'][1]
-social_output4 = predictor.predict(testsentence4)['score'][0]
-agency_output4 = predictor.predict(testsentence4)['score'][1]
-social_output5 = predictor.predict(testsentence5)['score'][0]
-agency_output5 = predictor.predict(testsentence5)['score'][1]
+    def save_model():
+        raise NotImplementedError
 
-if social_output1 <= 0.5:
-    social_out = "YES"
-else:
-    social_out = "NO"
+    def predict(sentence: str, printnum: bool = False):
+        if self.trained:
+            social_prediction = self.predictor.predict(sentence)['score'][0]
+            agency_prediction = self.predictor.predict(sentence)['score'][1]
+            if printnum:
+                print("Social: {}, Agency: {}".format(social_prediction, agency_prediction))
+            if social_output1 <= 0.5:
+                social_out = "yes"
+            else:
+                social_out = "no"
 
-if agency_output1 <= 0.5:
-    agency_out = "YES"
-else:
-    agency_out = "NO"
+            if agency_output1 <= 0.5:
+                agency_out = "yes"
+            else:
+                agency_out = "no"
+            return [agency_out, social_out]
+        else:
+            raise Exception('Please train the model before using it to make predictions')
 
-print("Social score for test sentence \'{}\', the output is {}".format(testsentence, social_output1))
-print("Agency For test sentence \'{}\', the output is {}".format(testsentence, agency_output1))
-print("Social Score for test sentence \'{}\', the output is {}".format(testsentence2, social_output2))
-print("Agency for test sentence \'{}\', the output is {}".format(testsentence2, agency_output2))
-print("Social Score for test sentence \'{}\', the output is {}".format(testsentence3, social_output3))
-print("Agency for test sentence \'{}\', the output is {}".format(testsentence3, agency_output3))
-print("Social Score for test sentence \'{}\', the output is {}".format(testsentence4, social_output4))
-print("Agency for test sentence \'{}\', the output is {}".format(testsentence4, agency_output4))
-print("Social Score for test sentence \'{}\', the output is {}".format(testsentence5, social_output5))
-print("Agency for test sentence \'{}\', the output is {}".format(testsentence5, agency_output5))
+    def batch_predict():
+        raise NotImplementedError
