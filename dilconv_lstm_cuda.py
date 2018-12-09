@@ -47,6 +47,9 @@ from cl_aff_utils.embedders import ELMoTextFieldEmbedder
 
 #for debug
 import time
+import csv
+import pandas as pd
+import re
 #torch.manual_seed(1)
 
 cuda = torch.device('cuda')
@@ -126,7 +129,7 @@ class BigramDilatedConvModel(Model):
                  vocab: Vocabulary,
                  
                  #Change loss function here
-                 lossmetric = torch.nn.BCEWithLogitsLoss()) -> None:
+                 lossmetric = torch.nn.MSELoss()) -> None:
 
         super().__init__(vocab)
 
@@ -323,43 +326,74 @@ predictor = SentenceSeq2VecPredictor(model, dataset_reader=reader)
 #battery of testing functions. At this point we can also implement the code to read in the test set for computing our system runs
 #If the score value is <0.5 the label is YES, else a NO
 #Not sure if this is the right thing to do although
-testsentence = "my husband called me just to tell me he loved me"
-testsentence2 = "I worked out which always makes me feel good"
-testsentence3 = "Finally got to watch the new Resident Evil movie"
-testsentence4 = "I got to talk to an old friend and reminisce on the good times"
-testsentence5 = "I had a great meeting yesterday at work with my boss and a few colleagues and we went out for lunch afterward everybody was excited by the projects we're working on and how efficient our team is"
+
+
+
+#Test has list of all test sentences
+
+def clean_str(string):
+ 
+    string = re.sub(r"\. \. \.", "\.", string)
+    string = re.sub(r"[^A-Za-z0-9(),!?\'\`\.]", " ", string)
+    # string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)
+    string = re.sub(r"\'s", " \'s", string)
+    string = re.sub(r"\'ve", " \'ve", string)
+    string = re.sub(r"n\'t", " n\'t", string)
+    string = re.sub(r"\'re", " \'re", string)
+    string = re.sub(r"\'d", " \'d", string)
+    string = re.sub(r"\'ll", " \'ll", string)
+    string = re.sub(r",", " , ", string)
+    string = re.sub(r"!", " ! ", string)
+    string = re.sub(r"\(", " ( ", string)
+    string = re.sub(r"\)", " ) ", string)
+    string = re.sub(r"\?", " ? ", string)
+    string = re.sub(r"\s{2,}", " ", string)
+    return string.strip().lower()
+
+test = []
+with open('csv/test_17k.csv',encoding="utf8", errors='ignore') as csvfile:
+        readCSV = csv.reader(csvfile, delimiter=',')
+        header = next(readCSV)
+        for row in readCSV:
+            test.append(row[1])
+
+for i in range(len(test)):
+    test[i] =  clean_str(test[i])
+
+social_score = []
+agency_score = []
+social_tag = []
+agency_tag = []
+
+
+#Assign yes/no label based on the prediction
+for i in range(len(test)):
+    print("Processing test datapoint {}...".format(test[i]))
+    print("Number:", i)
+    #social_score.append(predictor.predict(test[i])['score'][0])
+    #agency_score.append(predictor.predict(test[i])['score'][1])
+
+    if predictor.predict(test[i])['score'][0] < 0.5:
+        social_tag.append("Yes")
+    else:
+        social_tag.append("No")
+
+    if predictor.predict(test[i])['score'][1] < 0.5:
+        agency_tag.append("Yes")
+    else:
+        agency_tag.append("No")
+
+
+
+#Make a dict for output
+d = {'Sentence':test,'Social':social_tag, 'Agency':agency_tag}
+df = pd.DataFrame(d)
+print(df)
+
+#Save the sentence, social prediction, agency prediction on the test set in a csv file 
+df.to_csv("test_results.csv",sep=',', index=False)
 
 
 
 
-social_output1 = predictor.predict(testsentence)['score'][0]
-agency_output1 = predictor.predict(testsentence)['score'][1]
-social_output2 = predictor.predict(testsentence2)['score'][0]
-agency_output2 = predictor.predict(testsentence2)['score'][1]
-social_output3 = predictor.predict(testsentence3)['score'][0]
-agency_output3 = predictor.predict(testsentence3)['score'][1]
-social_output4 = predictor.predict(testsentence4)['score'][0]
-agency_output4 = predictor.predict(testsentence4)['score'][1]
-social_output5 = predictor.predict(testsentence5)['score'][0]
-agency_output5 = predictor.predict(testsentence5)['score'][1]
 
-if social_output1 <= 0.5:
-    social_out = "YES"
-else:
-    social_out = "NO"
-
-if agency_output1 <= 0.5:
-    agency_out = "YES"
-else:
-    agency_out = "NO"
-
-print("Social score for test sentence \'{}\', the output is {}".format(testsentence, social_output1))
-print("Agency For test sentence \'{}\', the output is {}".format(testsentence, agency_output1))
-print("Social Score for test sentence \'{}\', the output is {}".format(testsentence2, social_output2))
-print("Agency for test sentence \'{}\', the output is {}".format(testsentence2, agency_output2))
-print("Social Score for test sentence \'{}\', the output is {}".format(testsentence3, social_output3))
-print("Agency for test sentence \'{}\', the output is {}".format(testsentence3, agency_output3))
-print("Social Score for test sentence \'{}\', the output is {}".format(testsentence4, social_output4))
-print("Agency for test sentence \'{}\', the output is {}".format(testsentence4, agency_output4))
-print("Social Score for test sentence \'{}\', the output is {}".format(testsentence5, social_output5))
-print("Agency for test sentence \'{}\', the output is {}".format(testsentence5, agency_output5))
