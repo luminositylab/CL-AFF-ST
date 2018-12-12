@@ -2,7 +2,7 @@ import pandas as pd
 import datetime
 import numpy
 #import multiprocessing as mp
-from dcec_xval_pred import model_evaluator
+from lec_xval import model_evaluator
 from sklearn.utils import shuffle
 
 
@@ -27,7 +27,6 @@ df=dftrain
 df=df.append(dftest)
 datasets = []
 outputs = []
-hmids=[]
 for x in range(10):
     dftest = df.head(1056)
     #print(dftest)
@@ -38,8 +37,7 @@ for x in range(10):
     this_output = runmodel(this_dataset)
 
     datasets.append(this_dataset)
-    outputs.append(this_output[0])
-    hmids.append(this_output[1])
+    outputs.append(this_output)
 #pool = mp.Pool(processes=12)
 print(outputs)
 print(numpy.mean(numpy.vstack(outputs),axis=0))

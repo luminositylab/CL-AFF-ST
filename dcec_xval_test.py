@@ -50,8 +50,8 @@ from cl_aff_utils.embedders import ELMoTextFieldEmbedder
 
 #for debug
 import time
-import csv
 #torch.manual_seed(1)
+import csv
 
 from sklearn import metrics
 
@@ -172,106 +172,6 @@ class CLAFFDatasetReaderELMofromDataFrame(DatasetReader):
             #yield self.text_to_instance([Token(remover.sub('',word)) for word in sentence], agency, social)
             yield self.text_to_instance([Token(word) for word in sentence],str(agency), str(social))
 
-
-class CLAFFDatasetReaderELMoTest(DatasetReader):
-    """
-    DatasetReader for CL-AFF labelled data
-        Structure is Number, sentence, concepts, agency, social, ...
-    """
-
-    #SingleIdTokenIndexer is the class that links each word in the vocabulary to its token
-    #we will be generating ours and thus using the singleidtoken indexer
-    def __init__(self, token_indexers: Dict[str, TokenIndexer] = None) -> None:
-        super().__init__(lazy=False)
-        #changing this line is what's important for ELMo vectors. This basically makes it so that the sentence
-        #field will contain a sequence of character ids rather than word id tokens, this becomes important
-        #when it's actually fed into the ELMo model for generating vectors.
-        self.token_indexers = token_indexers or {"character_ids": ELMoTokenCharactersIndexer()}
-
-    #this function converts a sentence into the appropriate instance type and has to be adapted to 
-    #the model
-    def text_to_instance(self, tokens: List[Token], hmid:int = None) -> Instance:
-        sentence_field = TextField(tokens, self.token_indexers)
-        fields = {"sentence": sentence_field}
-
-
-        hmid_field = LabelField(label=hmid,skip_indexing=True)
-        fields["hmid"] = hmid_field
-
-        return Instance(fields)
-
-    #this is the outermost function and it gets automatically called at the reader.read() step in main
-    #it yields the outputs of text_to_instance which produces instance objects containing the keyed values
-    #for agency, social, and the sentence itself as an iterator of instances. This fxn depends on the dataset
-    #in use.
-    def _read(self, file_path: str) -> Iterator[Instance]:
-        with open(file_path) as f:
-            #skip line one, check if labeled set
-            firstline = next(f)
-            isLabeled = firstline.split(',')[2].strip('"') == 'concepts'
-            #now, read in data
-            #regex to get rid of non-alphanumeric
-            #remover = re.compile('[\W_]+')
-            for line in f:
-                sets = line.split(',')
-                sentence = sets[1].strip('"').split()
-                hmid = sets[0].strip('"')
-                #out = [str(agency), str(social)]
-                #yield self.text_to_instance([Token(remover.sub('',word)) for word in sentence], agency, social)
-                yield self.text_to_instance([Token(word) for word in sentence],int(hmid))
-
-
-class CLAFFDatasetReaderTestELMofromDataFrame(DatasetReader):
-    """
-    DatasetReader for CL-AFF labelled data
-        Structure is Number, sentence, concepts, agency, social, ...
-    """
-
-    #SingleIdTokenIndexer is the class that links each word in the vocabulary to its token
-    #we will be generating ours and thus using the singleidtoken indexer
-    def __init__(self, token_indexers: Dict[str, TokenIndexer] = None) -> None:
-        super().__init__(lazy=False)
-        #changing this line is what's important for ELMo vectors. This basically makes it so that the sentence
-        #field will contain a sequence of character ids rather than word id tokens, this becomes important
-        #when it's actually fed into the ELMo model for generating vectors.
-        self.token_indexers = token_indexers or {"character_ids": ELMoTokenCharactersIndexer()}
-
-    #this function converts a sentence into the appropriate instance type and has to be adapted to 
-    #the model
-    def text_to_instance(self, tokens: List[Token], hmid:int) -> Instance:
-        sentence_field = TextField(tokens, self.token_indexers)
-        fields = {"sentence": sentence_field}
-
-
-        hmid_field = LabelField(label=hmid,skip_indexing=True)
-        fields["hmid"] = hmid_field
-
-
-        return Instance(fields)
-
-    #this is the outermost function and it gets automatically called at the reader.read() step in main
-    #it yields the outputs of text_to_instance which produces instance objects containing the keyed values
-    #for agency, social, and the sentence itself as an iterator of instances. This fxn depends on the dataset
-    #in use.
-    def _read(self, df: pd.DataFrame) -> Iterator[Instance]:
-        #skip line one, check if labeled set
-        #firstline = next(f)
-        #isLabeled = firstline.split(',')[2].strip('"') == 'concepts'
-        #now, read in data
-        #regex to get rid of non-alphanumeric
-        #remover = re.compile('[\W_]+')
-        #we only use this reader to read in the labeled 10k that gets cross val'd
-        for line in df.rows:
-            #sets = line.split(',')
-            sentence = line['moment'].split()
-            hmid = line['hmid']
-            if str(agency) != 'no':
-                agency = 'yes'
-            if str(social) != 'no':
-                social = 'yes'
-            #out = [str(agency), str(social)]
-            #yield self.text_to_instance([Token(remover.sub('',word)) for word in sentence], agency, social)
-            yield self.text_to_instance([Token(word) for word in sentence],int(hmid))
 
 
 
@@ -446,8 +346,8 @@ class model_evaluator():
         self.model.cuda()
 
         #Set the optimizaer function here
-        optimizer = optim.Adam(self.model.parameters(), lr=0.5)
-        #optimizer = optim.Adam(model.parameters(), l   r=0.0001)
+        optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
+        #optimizer = optim.Adam(model.parameters(), lr=0.0001)
         move_optimizer_to_cuda(optimizer)
 
         # nice iterator functions are pretty much the only reason to stick with AllenNLP rn
@@ -460,46 +360,43 @@ class model_evaluator():
                           iterator=iterator,
                           train_dataset=train_dataset,
                           validation_dataset=validation_dataset,
-                          patience=1,
+                          patience=10,
                           num_epochs=500)
         self.iterator = iterator
-        #self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)
+        self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)
         self.trained = False
 
 
 
     def train(self):
         self.trainer.train()
-        self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader) 
         self.trained = True
         outputs = []
         labels = []
         self.model.set_evalmode(True)
-<<<<<<< HEAD:dcec_xval_pred.py
-
-        #now we want to read our entire test set in
-        Treader = CLAFFDatasetReaderELMoTest()
-        test_set = Treader.read(cached_path('csv/test_17k.csv'))
-        for instance in test_set:
-            print("evaluating")
-            self.model.forward_on_instance(instance)
-            outputs.append(self.model.os.cpu().data.numpy())
-            tensdc = instance.as_tensor_dict()
-            labels.append([tensdc['hmid'].cpu().data.numpy()])
-        print(outputs)
-        print(labels)
-=======
-        print("evaluating")
-        for instance in self.vd:
-            self.model.forward_on_instance(instance)
-            outputs.append(self.model.os.cpu().data.numpy())
-            tensdc = instance.as_tensor_dict()
-            labels.append([tensdc['agency'].cpu().data.numpy(), tensdc['social'].cpu().data.numpy()])
->>>>>>> 8dee800137d3547a9441cb7b98d21f9783035528:dcec_xval.py
-        outputs =np.vstack(outputs)
-        labels = np.vstack(labels)
-        #self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)  
-        return [outputs, labels]
+        #for instance in self.vd:
+        #    print("evaluating")
+        #    self.model.forward_on_instance(instance)
+        #    outputs.append(self.model.os.cpu().data.numpy())
+        #    tensdc = instance.as_tensor_dict()
+        #   labels.append([tensdc['agency'].cpu().data.numpy(), tensdc['social'].cpu().data.numpy()])
+        #print(outputs)
+        #print(labels)
+        #outputs =np.vstack(outputs)
+        #labels = np.vstack(labels)
+        #o_social = np.round(outputs[:,0])
+        #o_agency = np.round(outputs[:,1])
+        #rs = outputs[:,0]
+        #ra = outputs[:,1]
+        #l_social = labels[:,1]
+        #l_agency = labels[:,0]
+        #f1_social=metrics.f1_score(l_social,o_social,pos_label=0)
+        #f1_agency=metrics.f1_score(l_agency,o_agency,pos_label=0)  
+        #auc_social=metrics.roc_auc_score(l_social,rs)
+        #auc_agency=metrics.roc_auc_score(l_agency,ra)
+        #acc_s = metrics.accuracy_score(l_social,o_social)  
+        #acc_a = metrics.accuracy_score(l_agency,o_agency)  
+        return [0,0,0,0,0,0]
         #get F1
         #get AUC
 
@@ -527,49 +424,42 @@ class model_evaluator():
         return string.strip().lower()
 
     def predict(self, index):
+        print("predicting")
+        token_indexers = {"character_ids": ELMoTokenCharactersIndexer()}
         test = []
+        sentences = []
         hmid = []
-        self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader) 
         with open('csv/test_17k.csv',encoding="utf8", errors='ignore') as csvfile:
             readCSV = csv.reader(csvfile, delimiter=',')
             header = next(readCSV)
+            self.model.set_evalmode(True)
             for row in readCSV:
+                print("Processing hmid {}".format(row[0]))
                 hmid.append(row[0])
-                test.append(row[1])
+                sentence = self.clean_str(row[1])
+                sentences.append(sentence)
+                sentence_field = TextField([Token(word) for word in sentence], token_indexers)
+                fields = {"sentence": sentence_field}
+                instance_in = Instance(fields)
+                self.model.forward_on_instance(instance_in)
+                test.append(self.model.os.cpu().data.numpy())
+                
 
-        for i in range(len(test)):
-            test[i] =  self.clean_str(test[i])
 
-        social_score = []
-        agency_score = []
-        social_tag = []
-        agency_tag = []
-        print(test)
-        #print(self.predictor.predict)
-        #Assign yes/no label based on the prediction
-        for i in range(len(test)):
-            print("Processing test datapoint {}...".format(test[i]))
-            print("Number:", i)
-            print(self.predictor.predict(test[i]))
-        #social_score.append(predictor.predict(test[i])['score'][0])
-        #agency_score.append(predictor.predict(test[i])['score'][1])
-
-            if self.predictor.predict(test[i])['score'][0] < 0.5:
-                social_tag.append("Yes")
-            else:
-                social_tag.append("No")
-
-            if self.predictor.predict(test[i])['score'][1] < 0.5:
-                agency_tag.append("Yes")
-            else:
-                agency_tag.append("No")
-
+        test = np.round(np.vstack(test))
+        print("Generating dict")
         #Make a dict for output
-        d = {'hmid':hmid, 'Sentence':test,'Social':social_tag, 'Agency':agency_tag}
+        print(np.shape(hmid))
+        print(np.shape(test))
+        print(np.shape(test[:,0]))
+        print(np.shape(test[:,1]))
+
+        d = {'hmid':hmid, 'Sentence':sentences, 'Agency':test[:,1], 'Social':test[:,0]}
         df = pd.DataFrame(d)
         print(df)
         #Save the sentence, social prediction, agency prediction on the test set in a csv file 
-        df.to_csv("test_results_"+index+".csv",sep=',', index=False)
+        print("saving csv")
+        df.to_csv("test_results_"+ str(index) +".csv",sep=',', index=False)
 
     def batch_predict(self):
         raise NotImplementedError
