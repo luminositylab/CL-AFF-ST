@@ -12,9 +12,12 @@ class Dataset():
         self.train = train
         self.test = test
         self.number = number
-def runmodel(dataset):
+def runmodel(dataset, ind):
     evaluator = model_evaluator(dataset.train, dataset.test)
     metrics = evaluator.train()
+    evaluator.predict(ind)
+
+
     print(metrics)
     return metrics#return accuracy
 df = pd.read_csv('csv/labeled_10k.csv', header=0)
@@ -34,7 +37,8 @@ for x in range(10):
     df=dftrain
     df=df.append(dftest)
     this_dataset = Dataset(dftrain, dftest, x)
-    this_output = runmodel(this_dataset)
+    this_output = runmodel(this_dataset, x)
+
     datasets.append(this_dataset)
     outputs.append(this_output)
 #pool = mp.Pool(processes=12)
