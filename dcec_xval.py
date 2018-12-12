@@ -403,24 +403,48 @@ class model_evaluator():
     def save_model(self):
         raise NotImplementedError
 
-    def predict(self, sentence: str, printnum: bool = False):
-        if self.trained:
-            social_prediction = self.predictor.predict(sentence)['score'][0]
-            agency_prediction = self.predictor.predict(sentence)['score'][1]
-            if printnum:
-                print("Social: {}, Agency: {}".format(social_prediction, agency_prediction))
-            if social_output1 <= 0.5:
-                social_out = "yes"
-            else:
-                social_out = "no"
+    def predict(index):
+        test = []
+        hmid = []
+        with open('csv/test_17k.csv',encoding="utf8", errors='ignore') as csvfile:
+            readCSV = csv.reader(csvfile, delimiter=',')
+            header = next(readCSV)
+            for row in readCSV:
+                hmid.append(row[0])
+                test.append(row[1])
 
-            if agency_output1 <= 0.5:
-                agency_out = "yes"
-            else:
-                agency_out = "no"
-            return [agency_out, social_out]
+        for i in range(len(test)):
+            test[i] =  clean_str(test[i])
+
+        social_score = []
+        agency_score = []
+        social_tag = []
+        agency_tag = []
+
+
+        #Assign yes/no label based on the prediction
+        for i in range(len(test)):
+            print("Processing test datapoint {}...".format(test[i]))
+            print("Number:", i)
+        #social_score.append(predictor.predict(test[i])['score'][0])
+        #agency_score.append(predictor.predict(test[i])['score'][1])
+
+        if predictor.predict(test[i])['score'][0] < 0.5:
+            social_tag.append("Yes")
         else:
-            raise Exception('Please train the model before using it to make predictions')
+            social_tag.append("No")
+
+        if predictor.predict(test[i])['score'][1] < 0.5:
+            agency_tag.append("Yes")
+        else:
+            agency_tag.append("No")
+
+        #Make a dict for output
+        d = {'hmid':hmid, 'Sentence':test,'Social':social_tag, 'Agency':agency_tag}
+        df = pd.DataFrame(d)
+        print(df)
+        #Save the sentence, social prediction, agency prediction on the test set in a csv file 
+        df.to_csv("test_results_"+index+".csv",sep=',', index=False)
 
     def batch_predict(self):
         raise NotImplementedError
