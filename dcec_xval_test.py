@@ -151,7 +151,7 @@ class CLAFFDatasetReaderELMofromDataFrame(DatasetReader):
     #it yields the outputs of text_to_instance which produces instance objects containing the keyed values
     #for agency, social, and the sentence itself as an iterator of instances. This fxn depends on the dataset
     #in use.
-    def _read(self, df: pd.DataFrame) -> Iterator[Instance]:
+    def _read(self, data) -> Iterator[Instance]:
         #skip line one, check if labeled set
         #firstline = next(f)
         #isLabeled = firstline.split(',')[2].strip('"') == 'concepts'
@@ -159,20 +159,22 @@ class CLAFFDatasetReaderELMofromDataFrame(DatasetReader):
         #regex to get rid of non-alphanumeric
         #remover = re.compile('[\W_]+')
         #we only use this reader to read in the labeled 10k that gets cross val'd
-        for line in df.iterrows():
-            #sets = line.split(',')
-            sentence = line[1][1].split()
-            agency = line[1][3]
-            social = line[1][4]
-            if str(agency) != 'no':
-                agency = 'yes'
-            if str(social) != 'no':
-                social = 'yes'
-            #out = [str(agency), str(social)]
-            #yield self.text_to_instance([Token(remover.sub('',word)) for word in sentence], agency, social)
-            yield self.text_to_instance([Token(word) for word in sentence],str(agency), str(social))
-
-
+        if data[0]:
+            sentence = data[1].split()
+            yield self.text_to_instance([Token(word) for word in sentence])
+        else:
+            for line in data[1].iterrows():
+                #sets = line.split(',')
+                sentence = line[1][1].split()
+                agency = line[1][3]
+                social = line[1][4]
+                if str(agency) != 'no':
+                    agency = 'yes'
+                if str(social) != 'no':
+                    social = 'yes'
+                #out = [str(agency), str(social)]
+                #yield self.text_to_instance([Token(remover.sub('',word)) for word in sentence], agency, social)
+                yield self.text_to_instance([Token(word) for word in sentence],str(agency), str(social))
 
 
 class BigramDilatedConvModel(Model):
@@ -329,8 +331,8 @@ class model_evaluator():
         #with the ELMo embeddings.
         self.reader = CLAFFDatasetReaderELMofromDataFrame()
 
-        train_dataset = self.reader.read(train_df)
-        validation_dataset = self.reader.read(test_df)
+        train_dataset = self.reader.read([False,train_df])
+        validation_dataset = self.reader.read([False,test_df])
         self.vd = validation_dataset
 
         vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
@@ -360,7 +362,7 @@ class model_evaluator():
                           iterator=iterator,
                           train_dataset=train_dataset,
                           validation_dataset=validation_dataset,
-                          patience=10,
+                          patience=2,
                           num_epochs=500)
         self.iterator = iterator
         self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)
@@ -429,6 +431,8 @@ class model_evaluator():
         test = []
         sentences = []
         hmid = []
+        csv_output = open("test_results_"+ str(index) +".csv","w+")
+        csv_output.write("hmid,sentence,agency,social\n")
         with open('csv/test_17k.csv',encoding="utf8", errors='ignore') as csvfile:
             readCSV = csv.reader(csvfile, delimiter=',')
             header = next(readCSV)
@@ -438,28 +442,13 @@ class model_evaluator():
                 hmid.append(row[0])
                 sentence = self.clean_str(row[1])
                 sentences.append(sentence)
-                sentence_field = TextField([Token(word) for word in sentence], token_indexers)
-                fields = {"sentence": sentence_field}
-                instance_in = Instance(fields)
+                instance_in = self.reader.read([True,sentence])[0]
+                #print(instance_in)
                 self.model.forward_on_instance(instance_in)
-                test.append(self.model.os.cpu().data.numpy())
-                
+                mop = self.model.os.cpu().data.numpy()
+                test.append(mop)
+                csv_output.write(str(row[0])+","+str(sentence)+","+str(mop[1])+","+str(mop[0])+"\n")
 
-
-        test = np.round(np.vstack(test))
-        print("Generating dict")
-        #Make a dict for output
-        print(np.shape(hmid))
-        print(np.shape(test))
-        print(np.shape(test[:,0]))
-        print(np.shape(test[:,1]))
-
-        d = {'hmid':hmid, 'Sentence':sentences, 'Agency':test[:,1], 'Social':test[:,0]}
-        df = pd.DataFrame(d)
-        print(df)
-        #Save the sentence, social prediction, agency prediction on the test set in a csv file 
-        print("saving csv")
-        df.to_csv("test_results_"+ str(index) +".csv",sep=',', index=False)
 
     def batch_predict(self):
         raise NotImplementedError
