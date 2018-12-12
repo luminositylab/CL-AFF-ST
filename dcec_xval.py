@@ -32,6 +32,7 @@ from allennlp.modules.seq2vec_encoders import Seq2VecEncoder, PytorchSeq2VecWrap
 from allennlp.nn.util import get_text_field_mask, sequence_cross_entropy_with_logits
 from allennlp.training.metrics.mean_absolute_error import MeanAbsoluteError
 from allennlp.training.metrics.boolean_accuracy import BooleanAccuracy  
+from allennlp.training.metrics.f1_measure import F1Measure
 from allennlp.data.iterators import BucketIterator
 from allennlp.training.trainer import Trainer, move_optimizer_to_cuda
 from allennlp.predictors import SentenceTaggerPredictor
@@ -50,6 +51,8 @@ from cl_aff_utils.embedders import ELMoTextFieldEmbedder
 #for debug
 import time
 #torch.manual_seed(1)
+
+from sklearn import metrics
 
 class CLAFFDatasetReaderELMo(DatasetReader):
     """
@@ -215,6 +218,10 @@ class BigramDilatedConvModel(Model):
         #Initializing accuracy, loss and softmax variables
         self.accuracy = BooleanAccuracy()
         self.loss = lossmetric
+        self.evalmode = False
+
+    def set_evalmode(self, mode: bool):
+        self.evalmode = mode
 
     #I have gathered that the trainer method from allenNLP goes through the forward, loss = backward
     #sequence on its own and it searches for the keys in the instances that get passed as the arguments to
@@ -272,6 +279,8 @@ class BigramDilatedConvModel(Model):
         #output_score = self.sigmoid(output_score)
         
         output_score = torch.sigmoid(lin_output)
+        if self.evalmode:
+            self.os = output_score
         output = {"score": output_score}
         #print(output_score.shape)
         #output_score = torch.sigmoid(output_score)
@@ -299,7 +308,7 @@ class BigramDilatedConvModel(Model):
 
 
 class model_evaluator():
-    def __init__(train_df: pd.DataFrame, test_df: pd.DataFrame):
+    def __init__(self, train_df: pd.DataFrame, test_df: pd.DataFrame):
         cuda = torch.device('cuda')
 
         torch.set_default_tensor_type(torch.cuda.FloatTensor)
@@ -321,6 +330,7 @@ class model_evaluator():
 
         train_dataset = self.reader.read(cached_path('csv/labeled_9k5.csv'))
         validation_dataset = self.reader.read(cached_path('csv/labeled_k5.csv'))
+        self.vd = validation_dataset
 
         vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
 
@@ -335,7 +345,7 @@ class model_evaluator():
         self.model.cuda()
 
         #Set the optimizaer function here
-        optimizer = optim.Adam(model.parameters(), lr=0.0001)
+        optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
         #optimizer = optim.Adam(model.parameters(), lr=0.0001)
         move_optimizer_to_cuda(optimizer)
 
@@ -349,22 +359,51 @@ class model_evaluator():
                           iterator=iterator,
                           train_dataset=train_dataset,
                           validation_dataset=validation_dataset,
-                          patience=50,
+                          patience=5,
                           num_epochs=500)
-
+        self.iterator = iterator
         self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)
         self.trained = False
 
 
-    def train():
+
+    def train(self):
         self.trainer.train()
         self.trained = True
+        outputs = []
+        labels = []
+        self.model.set_evalmode(True)
+        for instance in self.vd:
+            print("evaluating")
+            self.model.forward_on_instance(instance)
+            outputs.append(self.model.os.cpu().data.numpy())
+            tensdc = instance.as_tensor_dict()
+            labels.append([tensdc['agency'].cpu().data.numpy(), tensdc['social'].cpu().data.numpy()])
+        print(outputs)
+        print(labels)
+        outputs =np.vstack(outputs)
+        labels = np.vstack(labels)
+        o_social = np.round(outputs[:,1])
+        o_agency = np.round(outputs[:,0])
+        rs = outputs[:,1]
+        ra = outputs[:,0]
+        l_social = labels[:,1]
+        l_agency = labels[:,0]
+        f1_social=metrics.f1_score(l_social,o_social,pos_label=0)
+        f1_agency=metrics.f1_score(l_agency,o_agency,pos_label=0)  
+        auc_social=metrics.roc_auc_score(l_social,rs)
+        auc_agency=metrics.roc_auc_score(l_agency,ra)
+        acc_s = metrics.accuracy_score(l_social,o_social)  
+        acc_a = metrics.accuracy_score(l_agency,o_agency)  
+        return [f1_social,f1_agency,auc_social,auc_agency,acc_s,acc_a]
+        #get F1
+        #get AUC
 
 
-    def save_model():
+    def save_model(self):
         raise NotImplementedError
 
-    def predict(sentence: str, printnum: bool = False):
+    def predict(self, sentence: str, printnum: bool = False):
         if self.trained:
             social_prediction = self.predictor.predict(sentence)['score'][0]
             agency_prediction = self.predictor.predict(sentence)['score'][1]
@@ -383,5 +422,5 @@ class model_evaluator():
         else:
             raise Exception('Please train the model before using it to make predictions')
 
-    def batch_predict():
+    def batch_predict(self):
         raise NotImplementedError
