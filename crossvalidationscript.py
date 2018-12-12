@@ -14,8 +14,9 @@ class Dataset():
         self.number = number
 def runmodel(dataset):
     evaluator = model_evaluator(dataset.train, dataset.test)
-    evaluator.train()
-    return dataset.number#return accuracy
+    metrics = evaluator.train()
+    print(metrics)
+    return metrics#return accuracy
 df = pd.read_csv('csv/labeled_10k.csv', header=0)
 df = shuffle(df)
 df = df.reset_index(drop=True)
@@ -38,4 +39,4 @@ for x in range(10):
     outputs.append(this_output)
 #pool = mp.Pool(processes=12)
 print(outputs)
-print(numpy.mean(outputs))
+print(numpy.mean(numpy.vstack(outputs),axis=0))

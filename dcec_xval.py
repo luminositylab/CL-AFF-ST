@@ -359,7 +359,7 @@ class model_evaluator():
                           iterator=iterator,
                           train_dataset=train_dataset,
                           validation_dataset=validation_dataset,
-                          patience=5,
+                          patience=10,
                           num_epochs=500)
         self.iterator = iterator
         self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)
@@ -383,10 +383,10 @@ class model_evaluator():
         print(labels)
         outputs =np.vstack(outputs)
         labels = np.vstack(labels)
-        o_social = np.round(outputs[:,1])
-        o_agency = np.round(outputs[:,0])
-        rs = outputs[:,1]
-        ra = outputs[:,0]
+        o_social = np.round(outputs[:,0])
+        o_agency = np.round(outputs[:,1])
+        rs = outputs[:,0]
+        ra = outputs[:,1]
         l_social = labels[:,1]
         l_agency = labels[:,0]
         f1_social=metrics.f1_score(l_social,o_social,pos_label=0)
