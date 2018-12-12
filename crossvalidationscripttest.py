@@ -2,7 +2,7 @@ import pandas as pd
 import datetime
 import numpy
 #import multiprocessing as mp
-from dcec_xval import model_evaluator
+from dcec_xval_pred import model_evaluator
 from sklearn.utils import shuffle
 
 
@@ -15,9 +15,6 @@ class Dataset():
 def runmodel(dataset, ind):
     evaluator = model_evaluator(dataset.train, dataset.test)
     metrics = evaluator.train()
-    evaluator.predict(ind)
-
-
     print(metrics)
     return metrics#return accuracy
 df = pd.read_csv('csv/labeled_10k.csv', header=0)
@@ -30,6 +27,7 @@ df=dftrain
 df=df.append(dftest)
 datasets = []
 outputs = []
+hmids=[]
 for x in range(10):
     dftest = df.head(1056)
     #print(dftest)
@@ -40,7 +38,8 @@ for x in range(10):
     this_output = runmodel(this_dataset, x)
 
     datasets.append(this_dataset)
-    outputs.append(this_output)
+    outputs.append(this_output[0])
+    hmids.append(this_output[1])
 #pool = mp.Pool(processes=12)
 print(outputs)
 print(numpy.mean(numpy.vstack(outputs),axis=0))
