@@ -29,7 +29,8 @@ from allennlp.modules.seq2seq_encoders import Seq2SeqEncoder, PytorchSeq2SeqWrap
 from allennlp.modules.seq2vec_encoders import Seq2VecEncoder, PytorchSeq2VecWrapper
 from allennlp.nn.util import get_text_field_mask, sequence_cross_entropy_with_logits
 from allennlp.training.metrics.mean_absolute_error import MeanAbsoluteError
-from allennlp.training.metrics.boolean_accuracy import BooleanAccuracy  
+from allennlp.training.metrics.boolean_accuracy import BooleanAccuracy
+from allennlp.training.metrics.f1_measure import F1Measure
 from allennlp.data.iterators import BucketIterator
 from allennlp.training.trainer import Trainer, move_optimizer_to_cuda
 from allennlp.predictors import SentenceTaggerPredictor
@@ -50,6 +51,9 @@ import time
 import csv
 import pandas as pd
 import re
+from sklearn import metrics
+from sklearn.metrics import precision_recall_fscore_support as score
+from sklearn.metrics import f1_score
 #torch.manual_seed(1)
 
 cuda = torch.device('cuda')
@@ -170,7 +174,9 @@ class BigramDilatedConvModel(Model):
                                           out_features=2)
         #Initializing accuracy, loss and softmax variables
         self.accuracy = BooleanAccuracy()
+        self.f1 = F1Measure(positive_label=0)
         self.loss = lossmetric
+        self.auc_s = 0
 
     #I have gathered that the trainer method from allenNLP goes through the forward, loss = backward
     #sequence on its own and it searches for the keys in the instances that get passed as the arguments to
@@ -245,11 +251,69 @@ class BigramDilatedConvModel(Model):
             social_sq = social.unsqueeze(1)
             agency_sq = agency.unsqueeze(1)
 
+
             #Concat the two tags as a single variable to be passed into the loss function
             labels = torch.cat((social_sq,agency_sq),dim=1)
+            #print(type(labels))
+            # pred_labels = torch.empty(labels.size())
+            # print(type(pred_labels))
+            # for i in range(len(output_score)):
+            #     if output_score[i][0] < 0.5:
+            #         pred_labels[i][0] = 0
+            #     else:
+            #         pred_labels[i][0] = 1
+
+            #     if output_score[i][1] < 0.5:
+            #         pred_labels[i][1] = 0
+            #     else:
+            #         pred_labels[i][1] = 1               
+
+            #print(pred_labels[0][0])
+            
+            #print(output_score.size())
+            #print(labels.size())
+            #print(output_score)
+            #print(torch.round(output_score).size())
             
             #Accuracy(40%) is shit as of now, should improve with elmo word embeddings
+
             self.accuracy(torch.round(output_score), labels.type(torch.cuda.FloatTensor))
+            #f1_result = []
+            #f1_result = metrics.f1_score(labels, torch.round(output_score))
+            soc_true = torch.empty(100,1)
+            agen_true = torch.empty(100,1)
+            pred_soc = torch.empty(100,1)
+            pred_agen = torch.empty(100,1)
+            pred_soc_label = torch.empty(100,1)
+            pred_agen_label = torch.empty(100,1)
+            for i in range(len(labels)):
+                soc_true[i] = labels[i][0]
+                agen_true[i] = labels[i][1]
+                pred_soc[i] = output_score[i][0]
+                pred_agen[i] = output_score[i][1]
+                pred_soc_label[i] = (torch.round(output_score))[i][0]
+                pred_agen_label[i] = (torch.round(output_score))[i][1]
+
+
+            #print(soc_true.size())
+            #print(pred_soc.size())
+            #print(pred_soc_label.size())
+
+
+            self.auc_s =  metrics.roc_auc_score(soc_true.data.cpu().numpy(), pred_soc.data.cpu().numpy())
+            print("Social AUC:",self.auc_s)
+            #auc_result_s = metrics.auc(fpr_s, tpr_s)
+            #print("Social ROC:", auc_result_s)
+            #fpr_a, tpr_a, threshold_a =  metrics.roc_curve(agen_true.data.cpu().numpy(), pred_agen.data.cpu().numpy())
+            #auc_result_a = metrics.roc_auc_score(fpr_a, tpr_a)
+            auc_a = metrics.roc_auc_score(agen_true.data.cpu().numpy(), pred_agen.data.cpu().numpy())
+            print("Agency AUC:", auc_a)
+            score = f1_score(soc_true.data.cpu().numpy(), pred_soc_label.data.cpu().numpy(), average='weighted')
+            print("F1 Social:",score)
+            score_f = f1_score(agen_true.data.cpu().numpy(), pred_agen_label.data.cpu().numpy(), average='weighted')
+            print("F1 Agency:",score)
+            #self.f1(torch.round(output_score), labels.type(torch.cuda.FloatTensor))
+
             
             #output["loss"] = self.loss(torch.cat([op_social,op_agency], dim=1),torch.cat([social.unsqueeze(dim=1).type(torch.FloatTensor),agency.unsqueeze(dim=1).type(torch.FloatTensor)],dim=1))
             
@@ -259,7 +323,7 @@ class BigramDilatedConvModel(Model):
         return output
 
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        return {"accuracy": self.accuracy.get_metric(reset) }
+        return {"accuracy": self.accuracy.get_metric(reset), "auc_s": self.auc_s}
 
 
 torch.set_default_tensor_type(torch.cuda.FloatTensor)
