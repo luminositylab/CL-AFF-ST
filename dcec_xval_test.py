@@ -51,6 +51,7 @@ from cl_aff_utils.embedders import ELMoTextFieldEmbedder
 #for debug
 import time
 #torch.manual_seed(1)
+import csv
 
 from sklearn import metrics
 
@@ -345,7 +346,7 @@ class model_evaluator():
         self.model.cuda()
 
         #Set the optimizaer function here
-        optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
+        optimizer = optim.Adam(self.model.parameters(), lr=0.1)
         #optimizer = optim.Adam(model.parameters(), lr=0.0001)
         move_optimizer_to_cuda(optimizer)
 
@@ -359,7 +360,7 @@ class model_evaluator():
                           iterator=iterator,
                           train_dataset=train_dataset,
                           validation_dataset=validation_dataset,
-                          patience=10,
+                          patience=1,
                           num_epochs=500)
         self.iterator = iterator
         self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)
@@ -373,27 +374,29 @@ class model_evaluator():
         outputs = []
         labels = []
         self.model.set_evalmode(True)
-        print("evaluating")
-        for instance in self.vd:
-            self.model.forward_on_instance(instance)
-            outputs.append(self.model.os.cpu().data.numpy())
-            tensdc = instance.as_tensor_dict()
-            labels.append([tensdc['agency'].cpu().data.numpy(), tensdc['social'].cpu().data.numpy()])
-        outputs =np.vstack(outputs)
-        labels = np.vstack(labels)
-        o_social = np.round(outputs[:,0])
-        o_agency = np.round(outputs[:,1])
-        rs = outputs[:,0]
-        ra = outputs[:,1]
-        l_social = labels[:,1]
-        l_agency = labels[:,0]
-        f1_social=metrics.f1_score(l_social,o_social,pos_label=0)
-        f1_agency=metrics.f1_score(l_agency,o_agency,pos_label=0)  
-        auc_social=metrics.roc_auc_score(l_social,rs)
-        auc_agency=metrics.roc_auc_score(l_agency,ra)
-        acc_s = metrics.accuracy_score(l_social,o_social)  
-        acc_a = metrics.accuracy_score(l_agency,o_agency)  
-        return [f1_social,f1_agency,auc_social,auc_agency,acc_s,acc_a]
+        #for instance in self.vd:
+        #    print("evaluating")
+        #    self.model.forward_on_instance(instance)
+        #    outputs.append(self.model.os.cpu().data.numpy())
+        #    tensdc = instance.as_tensor_dict()
+        #   labels.append([tensdc['agency'].cpu().data.numpy(), tensdc['social'].cpu().data.numpy()])
+        #print(outputs)
+        #print(labels)
+        #outputs =np.vstack(outputs)
+        #labels = np.vstack(labels)
+        #o_social = np.round(outputs[:,0])
+        #o_agency = np.round(outputs[:,1])
+        #rs = outputs[:,0]
+        #ra = outputs[:,1]
+        #l_social = labels[:,1]
+        #l_agency = labels[:,0]
+        #f1_social=metrics.f1_score(l_social,o_social,pos_label=0)
+        #f1_agency=metrics.f1_score(l_agency,o_agency,pos_label=0)  
+        #auc_social=metrics.roc_auc_score(l_social,rs)
+        #auc_agency=metrics.roc_auc_score(l_agency,ra)
+        #acc_s = metrics.accuracy_score(l_social,o_social)  
+        #acc_a = metrics.accuracy_score(l_agency,o_agency)  
+        return [0,0,0,0,0,0]
         #get F1
         #get AUC
 
@@ -401,47 +404,38 @@ class model_evaluator():
     def save_model(self):
         raise NotImplementedError
 
-    def predict(index):
+    def predict(self, index):
+        print("predicting")
+        token_indexers = {"character_ids": ELMoTokenCharactersIndexer()}
         test = []
+        sentences = []
         hmid = []
         with open('csv/test_17k.csv',encoding="utf8", errors='ignore') as csvfile:
             readCSV = csv.reader(csvfile, delimiter=',')
             header = next(readCSV)
+            self.model.set_evalmode(True)
             for row in readCSV:
+                print("Processing hmid {}".format(row[0]))
                 hmid.append(row[0])
-                test.append(row[1])
+                sentence = row[1]
+                sentences.append(sentence)
+                sentence_field = TextField([Token(word) for word in sentence], token_indexers)
+                fields = {"sentence": sentence_field}
+                instance_in = Instance(fields)
+                self.model.forward_on_instance(instance_in)
+                test.append(self.model.os.cpu().data.numpy())
+                if(int(row[0])>100):
+                    break
 
-        for i in range(len(test)):
-            test[i] =  clean_str(test[i])
 
-        social_score = []
-        agency_score = []
-        social_tag = []
-        agency_tag = []
-
-
-        #Assign yes/no label based on the prediction
-        for i in range(len(test)):
-            print("Processing test datapoint {}...".format(test[i]))
-            print("Number:", i)
-        #social_score.append(predictor.predict(test[i])['score'][0])
-        #agency_score.append(predictor.predict(test[i])['score'][1])
-
-        if predictor.predict(test[i])['score'][0] < 0.5:
-            social_tag.append("Yes")
-        else:
-            social_tag.append("No")
-
-        if predictor.predict(test[i])['score'][1] < 0.5:
-            agency_tag.append("Yes")
-        else:
-            agency_tag.append("No")
-
+        test = np.round(np.vstack(test))
+        print("Generating dict")
         #Make a dict for output
-        d = {'hmid':hmid, 'Sentence':test,'Social':social_tag, 'Agency':agency_tag}
+        d = {'hmid':hmid, 'Sentence':test,'Social':test[:,0], 'Agency':test[:,1]}
         df = pd.DataFrame(d)
         print(df)
         #Save the sentence, social prediction, agency prediction on the test set in a csv file 
+        print("saving csv")
         df.to_csv("test_results_"+index+".csv",sep=',', index=False)
 
     def batch_predict(self):

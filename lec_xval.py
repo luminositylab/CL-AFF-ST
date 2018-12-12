@@ -116,6 +116,64 @@ class CLAFFDatasetReaderELMo(DatasetReader):
 
 
 
+class CLAFFDatasetReaderELMofromDataFrame(DatasetReader):
+    """
+    DatasetReader for CL-AFF labelled data
+        Structure is Number, sentence, concepts, agency, social, ...
+    """
+
+    #SingleIdTokenIndexer is the class that links each word in the vocabulary to its token
+    #we will be generating ours and thus using the singleidtoken indexer
+    def __init__(self, token_indexers: Dict[str, TokenIndexer] = None) -> None:
+        super().__init__(lazy=False)
+        #changing this line is what's important for ELMo vectors. This basically makes it so that the sentence
+        #field will contain a sequence of character ids rather than word id tokens, this becomes important
+        #when it's actually fed into the ELMo model for generating vectors.
+        self.token_indexers = token_indexers or {"character_ids": ELMoTokenCharactersIndexer()}
+
+    #this function converts a sentence into the appropriate instance type and has to be adapted to 
+    #the model
+    def text_to_instance(self, tokens: List[Token], agency:str = None, social:str = None) -> Instance:
+        sentence_field = TextField(tokens, self.token_indexers)
+        fields = {"sentence": sentence_field}
+
+        if agency:
+            agency_field = LabelField(label=agency)
+            fields["agency"] = agency_field
+
+        if social:
+            social_field = LabelField(label=social)
+            fields["social"] = social_field
+
+        return Instance(fields)
+
+    #this is the outermost function and it gets automatically called at the reader.read() step in main
+    #it yields the outputs of text_to_instance which produces instance objects containing the keyed values
+    #for agency, social, and the sentence itself as an iterator of instances. This fxn depends on the dataset
+    #in use.
+    def _read(self, df: pd.DataFrame) -> Iterator[Instance]:
+        #skip line one, check if labeled set
+        #firstline = next(f)
+        #isLabeled = firstline.split(',')[2].strip('"') == 'concepts'
+        #now, read in data
+        #regex to get rid of non-alphanumeric
+        #remover = re.compile('[\W_]+')
+        #we only use this reader to read in the labeled 10k that gets cross val'd
+        for line in df.iterrows():
+            #sets = line.split(',')
+            sentence = line[1][1].split()
+            agency = line[1][3]
+            social = line[1][4]
+            if str(agency) != 'no':
+                agency = 'yes'
+            if str(social) != 'no':
+                social = 'yes'
+            #out = [str(agency), str(social)]
+            #yield self.text_to_instance([Token(remover.sub('',word)) for word in sentence], agency, social)
+            yield self.text_to_instance([Token(word) for word in sentence],str(agency), str(social))
+
+
+
 class LstmSocialAgency(Model):
     """
     LSTM model for predicting two labels Social and Agency for the CL-AFF labelled data
@@ -215,16 +273,16 @@ class model_evaluator():
         weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
         print("Done.")
         elmo = Elmo(options_file, weight_file, 1, dropout=0)
-##############################################################################################################
+        ##############################################################################################################
 
         elmo.cuda()
 
         #this is all to handle reading in the dataset and prepping the vocab for use. This will probably change slightly
         #with the ELMo embeddings.
-        self.reader = CLAFFDatasetReaderELMo()
+        self.reader = CLAFFDatasetReaderELMofromDataFrame()
 
-        train_dataset = self.reader.read(cached_path('csv/labeled_9k5.csv'))
-        validation_dataset = self.reader.read(cached_path('csv/labeled_k5.csv'))
+        train_dataset = self.reader.read(train_df)
+        validation_dataset = self.reader.read(test_df)
         self.vd = validation_dataset
         vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
 
@@ -232,7 +290,7 @@ class model_evaluator():
         word_embeddings = ELMoTextFieldEmbedder({"character_ids": elmo})
 
         EMBEDDING_DIM = elmo.get_output_dim()
-        HIDDEN_DIM = 50
+        HIDDEN_DIM = 25
 
         #initialize the model layers that we will want to change.
         lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True))
@@ -242,7 +300,7 @@ class model_evaluator():
         self.model.cuda()
 
         #Set the optimizaer function here
-        optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
+        optimizer = optim.Adam(self.model.parameters(), lr=0.0002)
         #optimizer = optim.Adam(model.parameters(), lr=0.0001)
         move_optimizer_to_cuda(optimizer)
 
@@ -256,7 +314,7 @@ class model_evaluator():
                           iterator=iterator,
                           train_dataset=train_dataset,
                           validation_dataset=validation_dataset,
-                          patience=10,
+                          patience=2,
                           num_epochs=500)
 
         self.iterator = iterator

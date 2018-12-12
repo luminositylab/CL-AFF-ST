@@ -2,7 +2,7 @@ import pandas as pd
 import datetime
 import numpy
 #import multiprocessing as mp
-from dcec_xval import model_evaluator
+from lec_xval import model_evaluator
 from sklearn.utils import shuffle
 
 
