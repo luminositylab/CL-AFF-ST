@@ -116,8 +116,7 @@ class CLAFFDatasetReaderELMo(DatasetReader):
 
 
 
-<<<<<<< HEAD
-=======
+
 class CLAFFDatasetReaderELMofromDataFrame(DatasetReader):
     """
     DatasetReader for CL-AFF labelled data
@@ -176,7 +175,7 @@ class CLAFFDatasetReaderELMofromDataFrame(DatasetReader):
 
 
 
->>>>>>> 8dee800137d3547a9441cb7b98d21f9783035528
+
 class LstmSocialAgency(Model):
     """
     LSTM model for predicting two labels Social and Agency for the CL-AFF labelled data
@@ -276,27 +275,20 @@ class model_evaluator():
         weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
         print("Done.")
         elmo = Elmo(options_file, weight_file, 1, dropout=0)
-<<<<<<< HEAD
-##############################################################################################################
-=======
+
         ##############################################################################################################
->>>>>>> 8dee800137d3547a9441cb7b98d21f9783035528
+
 
         elmo.cuda()
 
         #this is all to handle reading in the dataset and prepping the vocab for use. This will probably change slightly
         #with the ELMo embeddings.
-<<<<<<< HEAD
-        self.reader = CLAFFDatasetReaderELMo()
 
-        train_dataset = self.reader.read(cached_path('csv/labeled_9k5.csv'))
-        validation_dataset = self.reader.read(cached_path('csv/labeled_k5.csv'))
-=======
         self.reader = CLAFFDatasetReaderELMofromDataFrame()
 
         train_dataset = self.reader.read(train_df)
         validation_dataset = self.reader.read(test_df)
->>>>>>> 8dee800137d3547a9441cb7b98d21f9783035528
+
         self.vd = validation_dataset
         vocab = Vocabulary.from_instances(train_dataset + validation_dataset)
 
@@ -304,11 +296,9 @@ class model_evaluator():
         word_embeddings = ELMoTextFieldEmbedder({"character_ids": elmo})
 
         EMBEDDING_DIM = elmo.get_output_dim()
-<<<<<<< HEAD
-        HIDDEN_DIM = 50
-=======
+
         HIDDEN_DIM = 25
->>>>>>> 8dee800137d3547a9441cb7b98d21f9783035528
+
 
         #initialize the model layers that we will want to change.
         lstm = PytorchSeq2VecWrapper(torch.nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM, batch_first=True))
@@ -318,11 +308,9 @@ class model_evaluator():
         self.model.cuda()
 
         #Set the optimizaer function here
-<<<<<<< HEAD
-        optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
-=======
+
         optimizer = optim.Adam(self.model.parameters(), lr=0.0002)
->>>>>>> 8dee800137d3547a9441cb7b98d21f9783035528
+
         #optimizer = optim.Adam(model.parameters(), lr=0.0001)
         move_optimizer_to_cuda(optimizer)
 
@@ -336,11 +324,9 @@ class model_evaluator():
                           iterator=iterator,
                           train_dataset=train_dataset,
                           validation_dataset=validation_dataset,
-<<<<<<< HEAD
+
                           patience=10,
-=======
-                          patience=2,
->>>>>>> 8dee800137d3547a9441cb7b98d21f9783035528
+
                           num_epochs=500)
 
         self.iterator = iterator
