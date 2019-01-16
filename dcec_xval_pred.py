@@ -420,7 +420,7 @@ class model_evaluator():
         print("Downloading the weight file for ELMo...")
         weight_file = "https://s3-us-west-2.amazonaws.com/allennlp/models/elmo/2x4096_512_2048cnn_2xhighway/elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5"
         print("Done.")
-        elmo = Elmo(options_file, weight_file, 1, dropout=0)
+        elmo = nn.DataParallel(Elmo(options_file, weight_file, 1, dropout=0))
         ##############################################################################################################
 
         elmo.cuda()
@@ -475,27 +475,13 @@ class model_evaluator():
         outputs = []
         labels = []
         self.model.set_evalmode(True)
-<<<<<<< HEAD:dcec_xval_pred.py
 
-        #now we want to read our entire test set in
-        Treader = CLAFFDatasetReaderELMoTest()
-        test_set = Treader.read(cached_path('csv/test_17k.csv'))
-        for instance in test_set:
-            print("evaluating")
-            self.model.forward_on_instance(instance)
-            outputs.append(self.model.os.cpu().data.numpy())
-            tensdc = instance.as_tensor_dict()
-            labels.append([tensdc['hmid'].cpu().data.numpy()])
-        print(outputs)
-        print(labels)
-=======
         print("evaluating")
         for instance in self.vd:
             self.model.forward_on_instance(instance)
             outputs.append(self.model.os.cpu().data.numpy())
             tensdc = instance.as_tensor_dict()
             labels.append([tensdc['agency'].cpu().data.numpy(), tensdc['social'].cpu().data.numpy()])
->>>>>>> 8dee800137d3547a9441cb7b98d21f9783035528:dcec_xval.py
         outputs =np.vstack(outputs)
         labels = np.vstack(labels)
         #self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)  
