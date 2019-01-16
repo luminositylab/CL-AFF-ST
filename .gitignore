@@ -4,3 +4,4 @@ unlabeled*
 __pycache__
 old/
 .idea*
+csv/rundata/*
