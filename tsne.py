@@ -354,7 +354,7 @@ class model_evaluator():
         self.model.cuda()
 
         #Set the optimizaer function here
-        optimizer = optim.Adam(self.model.parameters(), lr=0.0001)
+        optimizer = optim.Adam(self.model.parameters(), lr=0.1)
         #optimizer = optim.Adam(model.parameters(), lr=0.0001)
         move_optimizer_to_cuda(optimizer)
 
@@ -368,8 +368,8 @@ class model_evaluator():
                           iterator=iterator,
                           train_dataset=train_dataset,
                           validation_dataset=validation_dataset,
-                          patience=10,
-                          num_epochs=500)
+                          patience=1,
+                          num_epochs=10)
         self.iterator = iterator
         self.predictor = SentenceSeq2VecPredictor(self.model, dataset_reader=self.reader)
         self.trained = False
@@ -447,67 +447,80 @@ class model_evaluator():
             header = next(readCSV)
             self.model.set_evalmode(True)
             print("DONE!!!")
-            for row in readCSV:
-                print("Processing hmid {}".format(row[0]))
-                hmid.append(row[0])
-                sentence = self.clean_str(row[1])
-                sentences.append(sentence)
-                social.append(row[4])
-                agency.append(row[3])
+            # for row in readCSV:
+            #     print("Processing hmid {}".format(row[0]))
+            #     hmid.append(row[0])
+            #     sentence = self.clean_str(row[1])
+            #     sentences.append(sentence)
+            #     social.append(row[4])
+            #     agency.append(row[3])
                 #rint(social)
 
-                instance_in = self.reader.read([True,sentence])[0]
+                #instance_in = self.reader.read([True,sentence])[0]
                 #print(instance_in)
-                self.model.forward_on_instance(instance_in)
-                mop = self.model.os.cpu().data.numpy()
+                #self.model.forward_on_instance(instance_in)
+                #mop = self.model.os.cpu().data.numpy()
                 #print("MOP:",mop)
                 #print("MOP SHAPE:", mop.shape)
-                test.append(mop)
+                #test.append(mop)
                 #print("TEST:",test)
                 #print("TEST shape:")
                 #print(print(np.asarray(test).shape))
                 #print("tsne-y shape:")
                 #print(tsne_y)
                 #print(print(np.asarray(tsne_y).shape))
-        print("Saving the test list")
-        with open("test_list.txt", "wb") as fp:   #Pickling
-            pickle.dump(test, fp)
-        print("Saving the tsne list")
-        with open("tsney_list.txt", "wb") as fp:   #Pickling
-            pickle.dump(tsne_y, fp)
+        with open("test_list.txt", "rb") as fp:   # Unpickling
+            test = pickle.load(fp)
 
-        social_only = ['yes','no']
-        social_agency = ['yes','yes']
-        agency_only = ['no','yes']
-        not_any = ['no','no']
+        with open("tsney_list.txt", "rb") as fp:   # Unpickling
+            tsne_y = pickle.load(fp)
+        
+        print("Test length:", len(test))
+        # social_only = ['yes','no']
+        # social_agency = ['yes','yes']
+        # agency_only = ['no','yes']
+        # not_any = ['no','no']
     
-        for i in range(len(social)):
-            if social[i] == social_agency[0] and agency[i] == social_agency[1]:
-                tsne_y.append(0)
-            elif social[i] == social_only[0] and agency[i] == social_only[1]:
-                tsne_y.append(1)
-            elif social[i] == agency_only[0] and agency[i] == agency_only[1]:
-                tsne_y.append(2)
-            elif social[i] == not_any[0] and agency[i] == not_any[1]:
-                tsne_y.append(3)
+        # for i in range(len(social)):
+        #     if social[i] == social_agency[0] and agency[i] == social_agency[1]:
+        #         tsne_y.append(0)
+        #     elif social[i] == social_only[0] and agency[i] == social_only[1]:
+        #         tsne_y.append(1)
+        #     elif social[i] == agency_only[0] and agency[i] == agency_only[1]:
+        #         tsne_y.append(2)
+        #     elif social[i] == not_any[0] and agency[i] == not_any[1]:
+        #         tsne_y.append(3)
 
+        # print("Saving the tsne list")
+        # with open("tsney_list.txt", "wb") as fp:   #Pickling
+        #     pickle.dump(tsne_y, fp)
+
+        print("TSNEY Length:", len(tsne_y))
+        print("INPUT VECTOR")
+        #print(test)
+        print("tsne vector")
+        #print(tsne_y)
+        test = np.asarray(test)
+        tsne_y = np.asarray(tsne_y)
         print("GETTING READY FOR TSNE")
+
         tsne = TSNE(n_components=2, random_state=0)
         X_2d = tsne.fit_transform(test)
         #print("LENGTH:",len(tsne_y.target_names))
         print("TSNE DONE")
-        target = np.array([0,1,2,3])
+        target = np.array(["Social & Agency","Social Only","Agency Only","None"])
         target_ids = range(4)
         #print(target_ids)
         plt.figure(figsize=(6, 5))
-        colors = 'r', 'g', 'b', 'c'
+        colors = 'r', 'g', 'y', 'b'
         for i, c, label in zip(target_ids, colors, target):
-            plt.scatter(X_2d[tsne_y == i, 0], X_2d[tsne_y == i, 1], c=c, label=label)
+            plt.scatter(X_2d[tsne_y == i, 0], X_2d[tsne_y == i, 1], edgecolors=c, label=label, marker = "o", alpha=0.5, facecolors='none')
         plt.legend()
         #i +=1
         #print(i)
         print("saving...")
-        pylab.savefig('updateed_latest.png')
+        #print("State in the best thing in te ")
+        pylab.savefig('TSNE_graph_circles.png')
         plt.show()
                 #csv_output.write(str(row[0])+","+str(sentence)+","+str(mop[1])+","+str(mop[0])+"\n")
 
