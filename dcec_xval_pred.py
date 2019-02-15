@@ -2,6 +2,7 @@ from typing import Iterator, List, Dict
 
 #import statements for torch and parts in it we need
 import torch
+import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from torch.autograd import Variable
@@ -412,7 +413,7 @@ class model_evaluator():
     def __init__(self, train_df: pd.DataFrame, test_df: pd.DataFrame):
         cuda = torch.device('cuda')
 
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)
+        #torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
         ################################EITHER USE THIS OR THE cl_aff_embedders.py ELMo embedder######################
         print("Downloading the options file for ELMo...")

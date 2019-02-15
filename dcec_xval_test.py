@@ -314,7 +314,7 @@ class model_evaluator():
     def __init__(self, train_df: pd.DataFrame, test_df: pd.DataFrame):
         cuda = torch.device('cuda')
 
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)
+        #torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
         ################################EITHER USE THIS OR THE cl_aff_embedders.py ELMo embedder######################
         print("Downloading the options file for ELMo...")
